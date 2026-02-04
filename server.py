@@ -6,7 +6,9 @@ import threading
 import time
 import traceback
 import uuid
-from datetime import datetime
+from datetime import datetime,timedelta, date
+import yfinance as yf
+import pytz
 
 import pandas as pd
 from flask import Flask, jsonify, request
@@ -37,6 +39,261 @@ os.makedirs(config.EVENT_DIR, exist_ok=True)
 os.makedirs(config.SCAN_DIR, exist_ok=True)
 os.makedirs(config.SIGNAL_DIR, exist_ok=True)
 os.makedirs(config.EXPORTS_DIR, exist_ok=True)
+# -----------------------------
+# Simulator helpers
+# -----------------------------
+
+NY = pytz.timezone("America/New_York")
+
+def _parse_date(d):
+    # expects "YYYY-MM-DD"
+    return datetime.strptime(d, "%Y-%m-%d").date()
+
+def _parse_time(t):
+    # expects "HH:MM:SS" or "HH:MM"
+    fmt = "%H:%M:%S" if len(t.split(":")) == 3 else "%H:%M"
+    return datetime.strptime(t, fmt).time()
+
+def _combine_ny(d: date, t):
+    return NY.localize(datetime.combine(d, t))
+
+def _safe_float(x):
+    try:
+        if x is None:
+            return None
+        if isinstance(x, str) and x.strip() == "":
+            return None
+        return float(x)
+    except Exception:
+        return None
+
+def _fetch_intraday_yahoo(symbol: str, d: date, interval: str):
+    """
+    Fetch intraday bars for a specific date using yfinance.
+    NOTE: Yahoo intraday availability is limited (recent days/weeks).
+    """
+    start = datetime.combine(d, datetime.min.time())
+    end = start + timedelta(days=1)
+
+    # yfinance wants naive datetimes; it returns tz-aware index sometimes.
+    df = yf.download(
+        tickers=symbol,
+        start=start,
+        end=end,
+        interval=interval,
+        progress=False,
+        auto_adjust=False,
+        prepost=False,
+        threads=False,
+    )
+
+    if df is None or df.empty:
+        return None
+
+    # Normalize columns
+    cols = [c.lower() for c in df.columns]
+    df.columns = cols
+
+    # Ensure required columns
+    for c in ["open", "high", "low", "close"]:
+        if c not in df.columns:
+            return None
+
+    # Ensure datetime index is NY tz-aware
+    idx = df.index
+    if getattr(idx, "tz", None) is None:
+        # yfinance sometimes returns naive times; treat as NY
+        df.index = pd.DatetimeIndex(df.index).tz_localize(NY, ambiguous="infer", nonexistent="shift_forward")
+    else:
+        df.index = df.index.tz_convert(NY)
+
+    return df
+
+def _first_hit_time(df_post, condition_series: pd.Series):
+    if condition_series is None or df_post is None or df_post.empty:
+        return None
+    hits = condition_series[condition_series]
+    if hits.empty:
+        return None
+    return hits.index[0]
+
+def _simulate_one(rec: dict, cfg: dict, df: pd.DataFrame, signal_ts: datetime):
+    """
+    rec columns expected (from your table):
+      Ticker, Score, EntryLow, EntryHigh, Stop, Target1, Target2
+    cfg:
+      entry_mode: limit|stop|market  (default limit)
+      entry_fill: low|mid|high       (default mid)
+      profit_pct: float (default 0.15)
+      conflict_policy: worst_case|best_case (default worst_case)
+      use_stop: bool (default True)
+    """
+    symbol = str(rec.get("Ticker") or "").strip().upper()
+    if not symbol:
+        return {"status": "ERROR", "reason": "Missing Ticker", "rec": rec}
+
+    entry_low = _safe_float(rec.get("EntryLow"))
+    entry_high = _safe_float(rec.get("EntryHigh"))
+    stop_price = _safe_float(rec.get("Stop"))
+    t1 = _safe_float(rec.get("Target1"))
+    t2 = _safe_float(rec.get("Target2"))
+    score = _safe_float(rec.get("Score"))
+
+    entry_mode = (cfg.get("entry_mode") or "limit").lower()
+    entry_fill_mode = (cfg.get("entry_fill") or "mid").lower()
+    conflict_policy = (cfg.get("conflict_policy") or "worst_case").lower()
+    profit_pct = float(cfg.get("profit_pct") or 0.15)
+    use_stop = bool(cfg.get("use_stop", True))
+
+    if df is None or df.empty:
+        return {"status": "NO_DATA", "symbol": symbol, "score": score, "reason": "No intraday bars from Yahoo"}
+
+    # Slice from signal time
+    df2 = df[df.index >= signal_ts].copy()
+    if df2.empty:
+        return {"status": "NO_DATA", "symbol": symbol, "score": score, "reason": "No bars after signal_time"}
+
+    # -----------------
+    # Entry detection
+    # -----------------
+    entry_time = None
+    entry_price = None
+
+    if entry_mode == "market":
+        entry_time = df2.index[0]
+        entry_price = float(df2.iloc[0]["open"])
+
+    elif entry_mode == "limit":
+        if entry_low is None or entry_high is None:
+            return {"status": "ERROR", "symbol": symbol, "score": score, "reason": "EntryLow/EntryHigh required for limit"}
+        # bar overlaps zone?
+        cond = (df2["low"] <= entry_high) & (df2["high"] >= entry_low)
+        entry_time = _first_hit_time(df2, cond)
+        if entry_time is None:
+            return {"status": "NO_TRADE", "symbol": symbol, "score": score, "reason": "Limit zone never touched"}
+        if entry_fill_mode == "low":
+            entry_price = float(entry_low)
+        elif entry_fill_mode == "high":
+            entry_price = float(entry_high)
+        else:
+            entry_price = float((entry_low + entry_high) / 2.0)
+
+    elif entry_mode == "stop":
+        if entry_low is None:
+            return {"status": "ERROR", "symbol": symbol, "score": score, "reason": "EntryLow required for stop"}
+        cond = (df2["high"] >= entry_low)
+        entry_time = _first_hit_time(df2, cond)
+        if entry_time is None:
+            return {"status": "NO_TRADE", "symbol": symbol, "score": score, "reason": "Stop entry never triggered"}
+        entry_price = float(entry_low)
+
+    else:
+        return {"status": "ERROR", "symbol": symbol, "score": score, "reason": f"Unknown entry_mode: {entry_mode}"}
+
+    # Post-entry bars
+    post = df2[df2.index >= entry_time]
+    if post.empty:
+        return {"status": "NO_DATA", "symbol": symbol, "score": score, "reason": "No post-entry bars"}
+
+    # Compute percent target
+    pct_target_price = entry_price * (1.0 + profit_pct)
+
+    # Hit detection times (raw hits for tuning)
+    stop_hit_time = None
+    if use_stop and stop_price is not None:
+        stop_hit_time = _first_hit_time(post, post["low"] <= stop_price)
+
+    t1_hit_time = None
+    if t1 is not None:
+        t1_hit_time = _first_hit_time(post, post["high"] >= t1)
+
+    t2_hit_time = None
+    if t2 is not None:
+        t2_hit_time = _first_hit_time(post, post["high"] >= t2)
+
+    pct_hit_time = _first_hit_time(post, post["high"] >= pct_target_price)
+
+    # Same-bar conflict note: stop and any target can both be "hit" in same candle.
+    # For raw hit timestamps we still report them; for "outcome" we can apply conflict policy.
+    # Outcome logic (simple): whichever happens first wins; if same timestamp and conflict -> policy decides.
+
+    events = []
+    if stop_hit_time is not None:
+        events.append(("STOP", stop_hit_time))
+    if t1_hit_time is not None:
+        events.append(("T1", t1_hit_time))
+    if t2_hit_time is not None:
+        events.append(("T2", t2_hit_time))
+    if pct_hit_time is not None:
+        events.append(("PCT", pct_hit_time))
+
+    outcome = "OPEN_AT_CLOSE"
+    outcome_time = None
+
+    if events:
+        # sort by time
+        events.sort(key=lambda x: x[1])
+        first_name, first_ts = events[0]
+        # check same-ts conflicts
+        same_ts = [e[0] for e in events if e[1] == first_ts]
+        if "STOP" in same_ts and len(same_ts) > 1:
+            # stop + target same candle
+            if conflict_policy == "best_case":
+                # choose first non-stop
+                for nm in same_ts:
+                    if nm != "STOP":
+                        outcome = f"{nm}_HIT"
+                        outcome_time = first_ts
+                        break
+            else:
+                outcome = "STOP_HIT"
+                outcome_time = first_ts
+        else:
+            outcome = "STOP_HIT" if first_name == "STOP" else f"{first_name}_HIT"
+            outcome_time = first_ts
+
+    # Stats: MFE/MAE from entry
+    mfe_pct = float((post["high"].max() / entry_price) - 1.0)
+    mae_pct = float((post["low"].min() / entry_price) - 1.0)
+
+    # Time deltas
+    minutes_to_entry = int((entry_time - signal_ts).total_seconds() // 60)
+
+    def _mins(a, b):
+        if a is None or b is None:
+            return None
+        return int((a - b).total_seconds() // 60)
+
+    last_close = float(post.iloc[-1]["close"])
+    pnl_close_pct = float((last_close / entry_price) - 1.0)
+
+    return {
+        "status": "OK",
+        "symbol": symbol,
+        "score": score,
+        "entry": {
+            "mode": entry_mode,
+            "fill_mode": entry_fill_mode,
+            "time": entry_time.isoformat(),
+            "price": entry_price,
+            "minutes_to_entry": minutes_to_entry
+        },
+        "levels": {
+            "stop": {"price": stop_price, "hit": stop_hit_time is not None, "time": stop_hit_time.isoformat() if stop_hit_time else None},
+            "t1": {"price": t1, "hit": t1_hit_time is not None, "time": t1_hit_time.isoformat() if t1_hit_time else None},
+            "t2": {"price": t2, "hit": t2_hit_time is not None, "time": t2_hit_time.isoformat() if t2_hit_time else None},
+            "pct": {"pct": profit_pct, "price": pct_target_price, "hit": pct_hit_time is not None, "time": pct_hit_time.isoformat() if pct_hit_time else None},
+        },
+        "outcome": {"result": outcome, "time": outcome_time.isoformat() if outcome_time else None, "conflict_policy": conflict_policy},
+        "stats": {"mfe_pct": mfe_pct, "mae_pct": mae_pct, "pnl_close_pct": pnl_close_pct},
+        "timing": {
+            "mins_to_stop": _mins(stop_hit_time, entry_time),
+            "mins_to_t1": _mins(t1_hit_time, entry_time),
+            "mins_to_t2": _mins(t2_hit_time, entry_time),
+            "mins_to_pct": _mins(pct_hit_time, entry_time),
+        }
+    }
+
 
 # --------------------------
 # EVENTS
@@ -364,6 +621,56 @@ def api_events():
         latest_id = (EVENTS[-1]["id"] if EVENTS else after_id)
 
     return jsonify({"events": new_events, "latest_id": latest_id})
+
+@app.post("/api/sim/run_day_batch")
+def api_sim_run_day_batch():
+    payload = request.get_json(force=True) or {}
+
+    d = _parse_date(payload.get("date"))
+    signal_time = _parse_time(payload.get("signal_time", "09:30:00"))
+    signal_ts = _combine_ny(d, signal_time)
+
+    interval = payload.get("bar_interval", "1m")
+    cfg = payload.get("cfg", {}) or {}
+    recs = payload.get("recs", []) or []
+
+    # basic caching so we only download each ticker once
+    cache = {}
+    results = []
+
+    for rec in recs:
+        symbol = str(rec.get("Ticker") or "").strip().upper()
+        if not symbol:
+            results.append({"status": "ERROR", "reason": "Missing Ticker", "rec": rec})
+            continue
+
+        if symbol not in cache:
+            try:
+                cache[symbol] = _fetch_intraday_yahoo(symbol, d, interval)
+            except Exception as e:
+                cache[symbol] = None
+                results.append({"status": "NO_DATA", "symbol": symbol, "reason": f"yfinance error: {e}"})
+                continue
+
+        try:
+            r = _simulate_one(rec, cfg, cache[symbol], signal_ts)
+            results.append(r)
+        except Exception as e:
+            results.append({"status": "ERROR", "symbol": symbol, "reason": str(e)})
+
+    # Summary stats for tuning
+    ok = [r for r in results if r.get("status") == "OK"]
+    summary = {
+        "count": len(results),
+        "ok": len(ok),
+        "filled": sum(1 for r in ok if r.get("entry", {}).get("price") is not None),
+        "t1_hit": sum(1 for r in ok if r.get("levels", {}).get("t1", {}).get("hit")),
+        "t2_hit": sum(1 for r in ok if r.get("levels", {}).get("t2", {}).get("hit")),
+        "pct_hit": sum(1 for r in ok if r.get("levels", {}).get("pct", {}).get("hit")),
+        "stop_hit": sum(1 for r in ok if r.get("levels", {}).get("stop", {}).get("hit")),
+    }
+
+    return jsonify({"summary": summary, "results": results})
 
 # --------------------------
 # START

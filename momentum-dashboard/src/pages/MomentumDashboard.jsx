@@ -182,7 +182,12 @@ export default function MomentumDashboard() {
             data-tooltip="Config"
             >
               ⚙ Config
-            </Link><br/>  
+            </Link><br/> 
+            <Link to="/simulator" 
+              className={`${styles.calcLink} ${styles.tooltip}`}
+            >
+              Simulator
+            </Link> 
         </div>
         
       </div>
