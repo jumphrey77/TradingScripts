@@ -1,0 +1,36 @@
+/* ===== DARK THEME ===== */
+.theme-dark {
+  --bg: #0b1220;
+  --text: #e5e7eb;
+  --muted: rgba(229, 231, 235, 0.7);
+  --border: rgba(148, 163, 184, 0.25);
+
+  --card-bg: rgba(2, 6, 23, 0.85);
+  --card-border: rgba(148, 163, 184, 0.25);
+  --shadow: 0 10px 30px rgba(0,0,0,0.35);
+
+  --card-new-bg: rgba(255, 165, 0, 0.10);     /* subtle amber tint */
+  --card-new-border: #ffa500;
+  --card-new-glow: 0 0 0 3px rgba(255,165,0,0.20);
+
+  --accent: #22c55e;
+  --warning: #ffa500;
+  --link: #60a5fa;
+}
+
+/* ===== LIGHT THEME ===== */
+.theme-light {
+  --bg: #f7f7fb;
+  --text: #111827;
+  --muted: rgba(17, 24, 39, 0.65);
+  --border: rgba(17, 24, 39, 0.18);
+
+  --card-bg: #ffffff;
+  --card-border: rgba(17, 24, 39, 0.18);
+  --card-new-bg: #fffae6;
+  --shadow: 0 10px 30px rgba(0,0,0,0.12);
+
+  --accent: #16a34a;
+  --warning: #f59e0b;
+  --link: #2563eb;
+}

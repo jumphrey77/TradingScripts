@@ -1,0 +1,9 @@
+:root {
+  --bg-card: #020617;
+  --green: #22c55e;
+}
+
+body {
+  background: #020617;
+  font-family: system-ui, sans-serif;
+}

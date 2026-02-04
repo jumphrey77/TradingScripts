@@ -1,0 +1,965 @@
+{
+  "$id": "scanner.schema.json",
+  "version": "1.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stock Scanner Config",
+  "type": "object",
+  "required": [
+    "finviz",
+    "scanner"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "finviz": {
+      "$ref": "#/$defs/finvizBlock"
+    },
+    "scanner": {
+      "$ref": "#/$defs/scannerBlock"
+    },
+    "appsettings": {
+      "$ref": "#/$defs/appsettingsBlock"
+    }
+  },
+  "$defs": {
+    "finvizBlock": {
+      "type": "object",
+      "required": [
+        "price",
+        "relvol",
+        "avgvol",
+        "float",
+        "curvol",
+        "news",
+        "change"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "price": {
+          "$ref": "#/$defs/priceRangeEnum",
+          "default": "",
+          "description": "Price filter used by Finviz dropdown"
+        },
+        "relvol": {
+          "$ref": "#/$defs/relVolumeEnum",
+          "default": "",
+          "description": "Relative Volume filter used by Finviz dropdown"
+        },
+        "avgvol": {
+          "$ref": "#/$defs/averageVolumeEnum",
+          "default": "",
+          "description": "Average filter used by Finviz dropdown"
+        },
+        "float": {
+          "$ref": "#/$defs/floatEnum",
+          "default": "",
+          "description": "Define the Float"
+        },
+        "curvol": {
+          "$ref": "#/$defs/currentVolumeEnum",
+          "default": "",
+          "description": "Current Volume filter used by Finviz dropdown"
+        },
+        "news": {
+          "$ref": "#/$defs/newsEnum",
+          "default": "",
+          "description": "Define the Amount of day to look for News"
+        },
+        "change": {
+          "$ref": "#/$defs/changeEnum",
+          "default": "",
+          "description": "Define the Amount of Change"
+        },
+        "ignoresectors": {
+          "$ref": "#/$defs/sectorEnum",
+          "default": [],
+          "description": "Omit These Sectors"
+        }
+      }
+    },
+    "scannerBlock": {
+      "type": "object",
+      "required": [
+        "price_min",
+        "price_max",
+        "gap",
+        "relvol",
+        "atr",
+        "score_min"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "price_min": {
+          "type": "number",
+          "description": "Minimum price of Stock.",
+          "minimum": 0
+        },
+        "price_max": {
+          "type": "number",
+          "description": "Max price of Stock.",
+          "minimum": 0
+        },
+        "gap": {
+          "type": "number",
+          "description": "Define GAP.",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "relvol": {
+          "type": "number",
+          "description": "A Relative Volume (RVOL) identifies stocks trading at significantly higher or lower volume compared to their historical average, typically over a 20-50 day period.",
+          "minimum": 0
+        },
+        "atr": {
+          "type": "number",
+          "description": "The Average True Range (ATR) filters stocks based on their volatility, measuring the average price movement of an asset over a specific period (commonly 14 days).",
+          "minimum": 0
+        },
+        "score_min": {
+          "type": "number",
+          "description": "Min Score define by our Algorithm for a stock.",
+          "minimum": 0,
+          "default": 200
+        }
+      }
+    },
+    "appsettingsBlock": {
+      "type": "object",
+      "description": "General application configuration flags.",
+      "required": [
+        "Debug",
+        "DebugAPI",
+        "UsePreMarketData",
+        "OutputSymbolAnalysis",
+        "DefaultTheme"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "Debug": {
+          "type": "boolean",
+          "description": "Enables or disables verbose logging and debug modes."
+        },
+        "DebugAPI": {
+          "type": "boolean",
+          "description": "Enables or disables verbose API logging and Terminal ."
+        },
+        "UsePreMarketData": {
+          "type": "boolean",
+          "description": "Determines if the scanner includes data from after-hours trading sessions."
+        },
+        "OutputSymbolAnalysis": {
+          "type": "boolean",
+          "description": "Determines if the scanner Dumps Success and Failures."
+        },
+        "DefaultTheme": {
+          "$ref": "#/$defs/themeEnum",
+          "default": "dark",
+          "description": "Determines Page Theme."
+        }
+      }
+    },
+    "priceRangeEnum": {
+      "type": "string",
+      "oneOf": [
+        {
+          "const": "",
+          "description": "Any"
+        },
+        {
+          "const": "u1",
+          "description": "Under $1"
+        },
+        {
+          "const": "u2",
+          "description": "Under $2"
+        },
+        {
+          "const": "u3",
+          "description": "Under $3"
+        },
+        {
+          "const": "u4",
+          "description": "Under $4"
+        },
+        {
+          "const": "u5",
+          "description": "Under $5"
+        },
+        {
+          "const": "u7",
+          "description": "Under $7"
+        },
+        {
+          "const": "u10",
+          "description": "Under $10"
+        },
+        {
+          "const": "u15",
+          "description": "Under $15"
+        },
+        {
+          "const": "u20",
+          "description": "Under $20"
+        },
+        {
+          "const": "u30",
+          "description": "Under $30"
+        },
+        {
+          "const": "u40",
+          "description": "Under $40"
+        },
+        {
+          "const": "u50",
+          "description": "Under $50"
+        },
+        {
+          "const": "o1",
+          "description": "Over $1"
+        },
+        {
+          "const": "o2",
+          "description": "Over $2"
+        },
+        {
+          "const": "o3",
+          "description": "Over $3"
+        },
+        {
+          "const": "o4",
+          "description": "Over $4"
+        },
+        {
+          "const": "o5",
+          "description": "Over $5"
+        },
+        {
+          "const": "o7",
+          "description": "Over $7"
+        },
+        {
+          "const": "o10",
+          "description": "Over $10"
+        },
+        {
+          "const": "o15",
+          "description": "Over $15"
+        },
+        {
+          "const": "o20",
+          "description": "Over $20"
+        },
+        {
+          "const": "o30",
+          "description": "Over $30"
+        },
+        {
+          "const": "o40",
+          "description": "Over $40"
+        },
+        {
+          "const": "o50",
+          "description": "Over $50"
+        },
+        {
+          "const": "o60",
+          "description": "Over $60"
+        },
+        {
+          "const": "o70",
+          "description": "Over $70"
+        },
+        {
+          "const": "o80",
+          "description": "Over $80"
+        },
+        {
+          "const": "o90",
+          "description": "Over $90"
+        },
+        {
+          "const": "o100",
+          "description": "Over $100"
+        },
+        {
+          "const": "1to5",
+          "description": "$1 to $5"
+        },
+        {
+          "const": "1to10",
+          "description": "$1 to $10"
+        },
+        {
+          "const": "1to20",
+          "description": "$1 to $20"
+        },
+        {
+          "const": "5to10",
+          "description": "$5 to $10"
+        },
+        {
+          "const": "5to20",
+          "description": "$5 to $20"
+        },
+        {
+          "const": "5to50",
+          "description": "$5 to $50"
+        },
+        {
+          "const": "10to20",
+          "description": "$10 to $20"
+        },
+        {
+          "const": "10to50",
+          "description": "$10 to $50"
+        },
+        {
+          "const": "20to50",
+          "description": "$20 to $50"
+        },
+        {
+          "const": "50to100",
+          "description": "$50 to $100"
+        }
+      ]
+    },
+    "floatEnum": {
+      "oneOf": [
+        {
+          "const": "",
+          "description": "Any"
+        },
+        {
+          "const": "u1",
+          "description": "Under 1M"
+        },
+        {
+          "const": "u5",
+          "description": "Under 5M"
+        },
+        {
+          "const": "u10",
+          "description": "Under 10M"
+        },
+        {
+          "const": "u20",
+          "description": "Under 20M"
+        },
+        {
+          "const": "u50",
+          "description": "Under 50M"
+        },
+        {
+          "const": "u100",
+          "description": "Under 100M"
+        },
+        {
+          "const": "o1",
+          "description": "Over 1M"
+        },
+        {
+          "const": "o2",
+          "description": "Over 2M"
+        },
+        {
+          "const": "o5",
+          "description": "Over 5M"
+        },
+        {
+          "const": "o10",
+          "description": "Over 10M"
+        },
+        {
+          "const": "o20",
+          "description": "Over 20M"
+        },
+        {
+          "const": "o50",
+          "description": "Over 50M"
+        },
+        {
+          "const": "o100",
+          "description": "Over 100M"
+        },
+        {
+          "const": "o200",
+          "description": "Over 200M"
+        },
+        {
+          "const": "o500",
+          "description": "Over 500M"
+        },
+        {
+          "const": "o1000",
+          "description": "Over 1000M"
+        },
+        {
+          "const": "u10p",
+          "description": "Under 10%"
+        },
+        {
+          "const": "u20p",
+          "description": "Under 20%"
+        },
+        {
+          "const": "u30p",
+          "description": "Under 30%"
+        },
+        {
+          "const": "u40p",
+          "description": "Under 40%"
+        },
+        {
+          "const": "u50p",
+          "description": "Under 50%"
+        },
+        {
+          "const": "u60p",
+          "description": "Under 60%"
+        },
+        {
+          "const": "u70p",
+          "description": "Under 70%"
+        },
+        {
+          "const": "u80p",
+          "description": "Under 80%"
+        },
+        {
+          "const": "u90p",
+          "description": "Under 90%"
+        },
+        {
+          "const": "o10p",
+          "description": "Over 10%"
+        },
+        {
+          "const": "o20p",
+          "description": "Over 20%"
+        },
+        {
+          "const": "o30p",
+          "description": "Over 30%"
+        },
+        {
+          "const": "o40p",
+          "description": "Over 40%"
+        },
+        {
+          "const": "o50p",
+          "description": "Over 50%"
+        },
+        {
+          "const": "o60p",
+          "description": "Over 60%"
+        },
+        {
+          "const": "o70p",
+          "description": "Over 70%"
+        },
+        {
+          "const": "o80p",
+          "description": "Over 80%"
+        },
+        {
+          "const": "o90p",
+          "description": "Over 90%"
+        },
+        {
+          "const": "modal",
+          "description": "Custom"
+        }
+      ],
+      "type": "string",
+      "description": "Float filter options"
+    },
+    "newsEnum": {
+      "oneOf": [
+        {
+          "const": "",
+          "description": "Any"
+        },
+        {
+          "const": "today",
+          "description": "Today"
+        },
+        {
+          "const": "todayafter",
+          "description": "Aftermarket Today"
+        },
+        {
+          "const": "sinceyesterday",
+          "description": "Since Yesterday"
+        },
+        {
+          "const": "sinceyesterdayafter",
+          "description": "Since the Aftermarket Yesterday"
+        },
+        {
+          "const": "yesterday",
+          "description": "Yesterday"
+        },
+        {
+          "const": "yesterdayafter",
+          "description": "In the Aftermarket Yesterday"
+        },
+        {
+          "const": "prevminutes5",
+          "description": "In the last 5 minutes"
+        },
+        {
+          "const": "prevminutes30",
+          "description": "In the last 30 minutes"
+        },
+        {
+          "const": "prevhours1",
+          "description": "In the last hour"
+        },
+        {
+          "const": "prevhours24",
+          "description": "In the last 24 hours"
+        },
+        {
+          "const": "prevdays7",
+          "description": "In the last 7 days"
+        },
+        {
+          "const": "prevmonth",
+          "description": "In the last month"
+        }
+      ],
+      "type": "string",
+      "description": "Options for news_date filter"
+    },
+    "averageVolumeEnum": {
+      "type": "string",
+      "description": "Average volume filter options",
+      "oneOf": [
+        {
+          "const": "",
+          "description": "Any"
+        },
+        {
+          "const": "u50",
+          "description": "Under 50K"
+        },
+        {
+          "const": "u100",
+          "description": "Under 100K"
+        },
+        {
+          "const": "u500",
+          "description": "Under 500K"
+        },
+        {
+          "const": "u750",
+          "description": "Under 750K"
+        },
+        {
+          "const": "u1000",
+          "description": "Under 1M"
+        },
+        {
+          "const": "o50",
+          "description": "Over 50K"
+        },
+        {
+          "const": "o100",
+          "description": "Over 100K"
+        },
+        {
+          "const": "o200",
+          "description": "Over 200K"
+        },
+        {
+          "const": "o300",
+          "description": "Over 300K"
+        },
+        {
+          "const": "o400",
+          "description": "Over 400K"
+        },
+        {
+          "const": "o500",
+          "description": "Over 500K"
+        },
+        {
+          "const": "o750",
+          "description": "Over 750K"
+        },
+        {
+          "const": "o1000",
+          "description": "Over 1M"
+        },
+        {
+          "const": "o2000",
+          "description": "Over 2M"
+        },
+        {
+          "const": "100to500",
+          "description": "100K to 500K"
+        },
+        {
+          "const": "100to1000",
+          "description": "100K to 1M"
+        },
+        {
+          "const": "500to1000",
+          "description": "500K to 1M"
+        },
+        {
+          "const": "500to10000",
+          "description": "500K to 10M"
+        }
+      ]
+    },
+    "currentVolumeEnum": {
+      "type": "string",
+      "description": "Current volume filter options",
+      "oneOf": [
+        {
+          "const": "",
+          "description": "Any"
+        },
+        {
+          "const": "u50",
+          "description": "Under 50K"
+        },
+        {
+          "const": "u100",
+          "description": "Under 100K"
+        },
+        {
+          "const": "u500",
+          "description": "Under 500K"
+        },
+        {
+          "const": "u750",
+          "description": "Under 750K"
+        },
+        {
+          "const": "u1000",
+          "description": "Under 1M"
+        },
+        {
+          "const": "o50",
+          "description": "Over 50K"
+        },
+        {
+          "const": "o100",
+          "description": "Over 100K"
+        },
+        {
+          "const": "o200",
+          "description": "Over 200K"
+        },
+        {
+          "const": "o300",
+          "description": "Over 300K"
+        },
+        {
+          "const": "o400",
+          "description": "Over 400K"
+        },
+        {
+          "const": "o500",
+          "description": "Over 500K"
+        },
+        {
+          "const": "o750",
+          "description": "Over 750K"
+        },
+        {
+          "const": "o1000",
+          "description": "Over 1M"
+        },
+        {
+          "const": "o2000",
+          "description": "Over 2M"
+        },
+        {
+          "const": "100to500",
+          "description": "100K to 500K"
+        },
+        {
+          "const": "100to1000",
+          "description": "100K to 1M"
+        },
+        {
+          "const": "500to1000",
+          "description": "500K to 1M"
+        },
+        {
+          "const": "500to10000",
+          "description": "500K to 10M"
+        }
+      ]
+    },
+    "relVolumeEnum": {
+      "type": "string",
+      "description": "Relative volume filter options",
+      "oneOf": [
+        {
+          "const": "",
+          "description": "Any"
+        },
+        {
+          "const": "o10",
+          "description": "Over 10"
+        },
+        {
+          "const": "o5",
+          "description": "Over 5"
+        },
+        {
+          "const": "o3",
+          "description": "Over 3"
+        },
+        {
+          "const": "o2",
+          "description": "Over 2"
+        },
+        {
+          "const": "o1.5",
+          "description": "Over 1.5"
+        },
+        {
+          "const": "o1",
+          "description": "Over 1"
+        },
+        {
+          "const": "o0.75",
+          "description": "Over 0.75"
+        },
+        {
+          "const": "o0.5",
+          "description": "Over 0.5"
+        },
+        {
+          "const": "o0.25",
+          "description": "Over 0.25"
+        },
+        {
+          "const": "u2",
+          "description": "Under 2"
+        },
+        {
+          "const": "u1.5",
+          "description": "Under 1.5"
+        },
+        {
+          "const": "u1",
+          "description": "Under 1"
+        },
+        {
+          "const": "u0.75",
+          "description": "Under 0.75"
+        },
+        {
+          "const": "u0.5",
+          "description": "Under 0.5"
+        },
+        {
+          "const": "u0.25",
+          "description": "Under 0.25"
+        },
+        {
+          "const": "u0.1",
+          "description": "Under 0.1"
+        }
+      ]
+    },
+    "changeEnum": {
+      "type": "string",
+      "description": "Change filter options",
+      "oneOf": [
+        {
+          "const": "",
+          "description": "Any"
+        },
+        {
+          "const": "u",
+          "description": "Up"
+        },
+        {
+          "const": "u1",
+          "description": "Up 1%"
+        },
+        {
+          "const": "u2",
+          "description": "Up 2%"
+        },
+        {
+          "const": "u3",
+          "description": "Up 3%"
+        },
+        {
+          "const": "u4",
+          "description": "Up 4%"
+        },
+        {
+          "const": "u5",
+          "description": "Up 5%"
+        },
+        {
+          "const": "u6",
+          "description": "Up 6%"
+        },
+        {
+          "const": "u7",
+          "description": "Up 7%"
+        },
+        {
+          "const": "u8",
+          "description": "Up 8%"
+        },
+        {
+          "const": "u9",
+          "description": "Up 9%"
+        },
+        {
+          "const": "u10",
+          "description": "Up 10%"
+        },
+        {
+          "const": "u15",
+          "description": "Up 15%"
+        },
+        {
+          "const": "u20",
+          "description": "Up 20%"
+        },
+        {
+          "const": "d",
+          "description": "Down"
+        },
+        {
+          "const": "d1",
+          "description": "Down 1%"
+        },
+        {
+          "const": "d2",
+          "description": "Down 2%"
+        },
+        {
+          "const": "d3",
+          "description": "Down 3%"
+        },
+        {
+          "const": "d4",
+          "description": "Down 4%"
+        },
+        {
+          "const": "d5",
+          "description": "Down 5%"
+        },
+        {
+          "const": "d6",
+          "description": "Down 6%"
+        },
+        {
+          "const": "d7",
+          "description": "Down 7%"
+        },
+        {
+          "const": "d8",
+          "description": "Down 8%"
+        },
+        {
+          "const": "d9",
+          "description": "Down 9%"
+        },
+        {
+          "const": "d10",
+          "description": "Down 10%"
+        },
+        {
+          "const": "d15",
+          "description": "Down 15%"
+        },
+        {
+          "const": "d20",
+          "description": "Down 20%"
+        }
+      ]
+    },
+    "sectorEnum": {
+      "type": "array",
+      "description": "Sector filter options (multiple allowed, no duplicates)",
+      "uniqueItems": true,
+      "default": [
+        "financial",
+        "utilities"
+      ],
+      "items": {
+        "type": "string",
+        "oneOf": [
+          {
+            "const": "",
+            "description": "Any"
+          },
+          {
+            "const": "basicmaterials",
+            "description": "Basic Materials"
+          },
+          {
+            "const": "communicationservices",
+            "description": "Communication Services"
+          },
+          {
+            "const": "consumercyclical",
+            "description": "Consumer Cyclical"
+          },
+          {
+            "const": "consumerdefensive",
+            "description": "Consumer Defensive"
+          },
+          {
+            "const": "energy",
+            "description": "Energy"
+          },
+          {
+            "const": "financial",
+            "description": "Financial"
+          },
+          {
+            "const": "healthcare",
+            "description": "Healthcare"
+          },
+          {
+            "const": "industrials",
+            "description": "Industrials"
+          },
+          {
+            "const": "realestate",
+            "description": "Real Estate"
+          },
+          {
+            "const": "technology",
+            "description": "Technology"
+          },
+          {
+            "const": "utilities",
+            "description": "Utilities"
+          }
+        ]
+      }
+    },
+    "themeEnum": {
+      "type": "string",
+      "description": "Theme Options (dark, light)",
+      "oneOf": [
+        {
+          "const": "dark",
+          "description": "Dark Theme"
+        },
+        {
+          "const": "light",
+          "description": "Light Theme"
+        }
+      ]
+    }
+  }
+}

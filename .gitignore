@@ -1,0 +1,32 @@
+# -----------------------------
+# Project folders (repo root)
+# -----------------------------
+/config/backups/
+/history/
+/zz_old/
+
+/node_modules/
+/dist/
+/build/
+
+# -----------------------------
+# Python
+# -----------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environments
+venv/
+.venv/
+.env
+
+# -----------------------------
+# Jupyter
+# -----------------------------
+.ipynb_checkpoints/
+
+# -----------------------------
+# Logs / runtime
+# -----------------------------
+*.log

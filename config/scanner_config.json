@@ -1,0 +1,31 @@
+{
+  "$schema": "./scanner.schema.json",
+  "appsettings": {
+    "Debug": false,
+    "DebugAPI": false,
+    "DefaultTheme": "light",
+    "OutputSymbolAnalysis": false,
+    "UsePreMarketData": true
+  },
+  "finviz": {
+    "avgvol": "o500",
+    "change": "u",
+    "curvol": "o50",
+    "float": "",
+    "ignoresectors": [
+      "financial",
+      "utilities"
+    ],
+    "news": "sinceyesterday",
+    "price": "u20",
+    "relvol": "o2"
+  },
+  "scanner": {
+    "atr": 8,
+    "gap": 5,
+    "price_max": 20,
+    "price_min": 1,
+    "relvol": 2,
+    "score_min": 200
+  }
+}
