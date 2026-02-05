@@ -404,7 +404,7 @@ def scan(return_df=False):
     ignoresectors = fv.get("ignoresectors", [])  # default to empty list
 
     print(f"IGNORE SECTORS CONFIG: {ignoresectors}")
-    print(f"TABLE COUNT BEFORE {len(finviz_df_all) if finviz_df_all is not None else 0}")
+    debug(f"TABLE COUNT BEFORE {len(finviz_df_all) if finviz_df_all is not None else 0}")
 
     finviz_df = finviz_df_all
 
@@ -415,7 +415,7 @@ def scan(return_df=False):
         sector_series = finviz_df_all.iloc[:, 3].astype(str).str.strip().str.lower()
         finviz_df = finviz_df_all[~sector_series.isin(ignoresectors_set)]
 
-    print(f"TABLE COUNT AFTER {len(finviz_df) if finviz_df is not None else 0}")
+    debug(f"TABLE COUNT AFTER {len(finviz_df) if finviz_df is not None else 0}")
 
     tickers = finviz_df["Ticker"].unique().tolist()
 
@@ -510,12 +510,18 @@ def scan(return_df=False):
     df = pd.DataFrame(results).sort_values("Score", ascending=False)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_file = os.path.join(config.EXPORTS_DIR, f"{config.OUTPUT_PREFIX}_{timestamp}.csv")
+    
+    #TODO SAVE TO DAY FOLDER
+    daydirname = datetime.now().strftime("%Y-%m-%d")
+    daypath = os.path.join(config.EXPORTS_DIR, daydirname)
+    os.makedirs(daypath, exist_ok=True)
+    print(f"DAY DIRECTORY {daydirname} | {daypath}")
+    #csv_file = os.path.join(config.EXPORTS_DIR,f"{config.OUTPUT_PREFIX}_{timestamp}.csv")
+    csv_file = os.path.join(config.EXPORTS_DIR, daydirname,f"{config.OUTPUT_PREFIX}_{timestamp}.csv")
 
     df.to_csv(csv_file, index=False)
 
     print(f"\n🔥 USE_PREMARKET is {config.USE_PREMARKET}")
-
     print(f"🔥 FINAL {len(df)} QUALIFIERS")
     print(df.head(25))
     print(f"\n💾 Saved to {csv_file}")

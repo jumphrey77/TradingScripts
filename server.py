@@ -39,6 +39,9 @@ os.makedirs(config.EVENT_DIR, exist_ok=True)
 os.makedirs(config.SCAN_DIR, exist_ok=True)
 os.makedirs(config.SIGNAL_DIR, exist_ok=True)
 os.makedirs(config.EXPORTS_DIR, exist_ok=True)
+#TODO Make SubDir
+
+
 # -----------------------------
 # Simulator helpers
 # -----------------------------
@@ -65,13 +68,23 @@ def _safe_float(x):
             return None
         return float(x)
     except Exception:
+
+
         return None
 
-def _fetch_intraday_yahoo(symbol: str, d: date, interval: str):
+def _fetch_intraday_yahoo(symbol, d: date, interval: str):
     """
     Fetch intraday bars for a specific date using yfinance.
     NOTE: Yahoo intraday availability is limited (recent days/weeks).
     """
+    # HARDEN: symbol sometimes arrives as ('BATL',) or ['BATL']
+    if isinstance(symbol, (list, tuple)):
+        symbol = symbol[0] if symbol else ""
+    symbol = str(symbol).strip().upper()
+
+    if not symbol:
+        return None
+
     start = datetime.combine(d, datetime.min.time())
     end = start + timedelta(days=1)
 
@@ -90,9 +103,21 @@ def _fetch_intraday_yahoo(symbol: str, d: date, interval: str):
     if df is None or df.empty:
         return None
 
-    # Normalize columns
-    cols = [c.lower() for c in df.columns]
-    df.columns = cols
+    # Normalize columns (handle MultiIndex from yfinance)
+    if isinstance(df.columns, pd.MultiIndex):
+        # usually levels like (PriceField, Ticker) or (Ticker, PriceField)
+        # We want open/high/low/close as simple lowercase names
+        # Pick the level that contains OHLC labels
+        lvl0 = [str(x).lower() for x in df.columns.get_level_values(0)]
+        lvl1 = [str(x).lower() for x in df.columns.get_level_values(1)]
+
+        # If level 0 looks like OHLC, use it; else use level 1
+        ohlc = {"open", "high", "low", "close", "adj close", "volume"}
+        use_level = 0 if any(v in ohlc for v in lvl0) else 1
+
+        df.columns = [str(x).lower() for x in df.columns.get_level_values(use_level)]
+    else:
+        df.columns = [str(c).lower() for c in df.columns]
 
     # Ensure required columns
     for c in ["open", "high", "low", "close"]:
@@ -128,7 +153,14 @@ def _simulate_one(rec: dict, cfg: dict, df: pd.DataFrame, signal_ts: datetime):
       conflict_policy: worst_case|best_case (default worst_case)
       use_stop: bool (default True)
     """
-    symbol = str(rec.get("Ticker") or "").strip().upper()
+    """
+    #symbol = str(rec.get("Ticker") or "").strip().upper()
+    """
+    raw = rec.get("Ticker")
+    if isinstance(raw, (list, tuple)):
+        raw = raw[0] if raw else ""
+    symbol = str(raw or "").strip().upper()
+    
     if not symbol:
         return {"status": "ERROR", "reason": "Missing Ticker", "rec": rec}
 
@@ -470,7 +502,7 @@ def scanner_worker():
 
     while True:
         try:
-            print("\n🔄 Running scheduled scan...")
+            print("🔄 Running scheduled scan...")
 
             df = scan(return_df=True)
             if df is None or len(df) == 0:
@@ -639,13 +671,18 @@ def api_sim_run_day_batch():
     results = []
 
     for rec in recs:
-        symbol = str(rec.get("Ticker") or "").strip().upper()
+        #symbol = str(rec.get("Ticker") or "").strip().upper()
+        raw = rec.get("Ticker")
+        if isinstance(raw, (list, tuple)):
+            raw = raw[0] if raw else ""
+        symbol = str(raw).strip().upper()
         if not symbol:
             results.append({"status": "ERROR", "reason": "Missing Ticker", "rec": rec})
             continue
 
         if symbol not in cache:
             try:
+                print("DEBUG ticker raw:", repr(rec.get("Ticker")), "=> symbol:", repr(symbol), "type:", type(rec.get("Ticker")))
                 cache[symbol] = _fetch_intraday_yahoo(symbol, d, interval)
             except Exception as e:
                 cache[symbol] = None

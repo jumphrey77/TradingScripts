@@ -4,7 +4,7 @@
     "Debug": false,
     "DebugAPI": false,
     "DefaultTheme": "light",
-    "OutputSymbolAnalysis": false,
+    "OutputSymbolAnalysis": true,
     "UsePreMarketData": true
   },
   "finviz": {
@@ -13,8 +13,7 @@
     "curvol": "o50",
     "float": "",
     "ignoresectors": [
-      "financial",
-      "utilities"
+      ""
     ],
     "news": "sinceyesterday",
     "price": "u20",

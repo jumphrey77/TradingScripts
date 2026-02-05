@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import styles from "../styles/SimulatorPage.module.css";
 
 function parseTSV(tsvText) {
   const lines = tsvText.split(/\r?\n/).filter(Boolean);
@@ -56,7 +57,7 @@ function fmtTime(iso) {
 
 export default function SimulatorPage() {
   const [date, setDate] = useState("");
-  const [signalTime, setSignalTime] = useState("09:30:00");
+  const [signalTime, setSignalTime] = useState("08:00:00");
   const [barInterval, setBarInterval] = useState("1m");
 
   const [entryMode, setEntryMode] = useState("limit");     // default #2
@@ -84,31 +85,47 @@ export default function SimulatorPage() {
     setLoading(true);
     setSummary(null);
     setResults([]);
+
     try {
-      const res = await fetch("/api/sim/run_day_batch", {
+        const res = await fetch("/api/sim/run_day_batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          date,
-          signal_time: signalTime,
-          bar_interval: barInterval,
-          cfg: {
+            date,
+            signal_time: signalTime,
+            bar_interval: barInterval,
+            cfg: {
             entry_mode: entryMode,
             entry_fill: entryFill,
             profit_pct: profitPct,
             use_stop: useStop,
             conflict_policy: conflictPolicy
-          },
-          recs
+            },
+            recs
         })
-      });
-      const data = await res.json();
-      setSummary(data.summary || null);
-      setResults(data.results || []);
+        });
+
+        // Read as text first (works even if server returns HTML by mistake)
+        const text = await res.text();
+
+        let payload;
+        try {
+            payload = JSON.parse(text);
+        } catch (e) {
+            throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 120)}`);
+        }
+
+        if (!res.ok) {
+            // If backend returns error JSON, show it
+            throw new Error(payload?.error || payload?.message || `HTTP ${res.status}`);
+        }
+
+        setSummary(payload.summary || null);
+        setResults(payload.results || []);
     } catch (e) {
-      setSummary({ error: String(e) });
+        setSummary({ error: String(e.message || e) });
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   }
 
@@ -119,11 +136,24 @@ export default function SimulatorPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(160px, 1fr))", gap: 10, marginBottom: 12 }}>
         <div>
           <div>Date (YYYY-MM-DD)</div>
-          <input value={date} onChange={e => setDate(e.target.value)} placeholder="2026-01-27" style={{ width: "100%", padding: 8 }} />
+          <input 
+            type="date"
+            value={date} 
+            onChange={e => setDate(e.target.value)} 
+            placeholder="2026-01-27" 
+            style={{ width: "100%", padding: 8 }} 
+          />
+          <div style={{ fontSize: 12, opacity: 0.7 }}>ET (New York)</div>
         </div>
         <div>
           <div>Signal Time</div>
-          <input value={signalTime} onChange={e => setSignalTime(e.target.value)} style={{ width: "100%", padding: 8 }} />
+          <input 
+            type="time"
+            step="60"
+            value={signalTime} 
+            onChange={e => setSignalTime(e.target.value)} 
+            style={{ width: "100%", padding: 8 }} 
+        />
         </div>
         <div>
           <div>Bar Interval</div>
@@ -186,7 +216,10 @@ export default function SimulatorPage() {
         </div>
 
         <div style={{ display: "flex", alignItems: "end" }}>
-          <button onClick={runBatch} disabled={loading || !date || recs.length === 0} style={{ padding: "10px 14px", width: "100%" }}>
+          <button 
+            onClick={runBatch} 
+            disabled={loading || !date || recs.length === 0} 
+            style={{ padding: "10px 14px", width: "100%" }}>
             {loading ? "Running..." : `Run Batch (${recs.length})`}
           </button>
         </div>
@@ -239,8 +272,8 @@ export default function SimulatorPage() {
               if (r.status !== "OK") {
                 return (
                   <tr key={idx}>
-                    <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{r.symbol || ""}</td>
-                    <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{r.score ?? ""}</td>
+                    <td className={`${styles.summaryRow}`}>{r.symbol || ""}</td>
+                    <td className={`${styles.summaryRow}`}>{r.score ?? ""}</td>
                     <td colSpan={9} style={{ padding: 8, borderBottom: "1px solid #f0f0f0", color: "crimson" }}>
                       {r.status}: {r.reason || ""}
                     </td>
@@ -269,20 +302,20 @@ export default function SimulatorPage() {
 
               return (
                 <tr key={idx}>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{r.symbol}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{(r.score ?? "").toString()}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{filled ? "✅" : "—"}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{t1 ? "✅" : "—"}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{t2 ? "✅" : "—"}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{pct ? "✅" : "—"}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{st ? "🛑" : "—"}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>
+                  <td className={styles.summaryRow}>{r.symbol}</td>
+                  <td className={styles.summaryRow}>{(r.score ?? "").toString()}</td>
+                  <td className={styles.summaryRow}>{filled ? "✅" : "—"}</td>
+                  <td className={styles.summaryRow}>{t1 ? "✅" : "—"}</td>
+                  <td className={styles.summaryRow}>{t2 ? "✅" : "—"}</td>
+                  <td className={styles.summaryRow}>{pct ? "✅" : "—"}</td>
+                  <td className={styles.summaryRow}>{st ? "🛑" : "—"}</td>
+                  <td className={styles.summaryRowLast}>
                     {entry.price?.toFixed?.(2)} @ {fmtTime(entry.time)}
                   </td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{fmtPct(stats.mfe_pct)}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{fmtPct(stats.mae_pct)}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0" }}>{outcome.result || ""}</td>
-                  <td style={{ padding: 8, borderBottom: "1px solid #f0f0f0", whiteSpace: "nowrap" }}>{times}</td>
+                  <td className={styles.summaryRow}>{fmtPct(stats.mfe_pct)}</td>
+                  <td className={styles.summaryRow}>{fmtPct(stats.mae_pct)}</td>
+                  <td className={styles.summaryRow}>{outcome.result || ""}</td>
+                  <td className={styles.summaryRowLast}>{times}</td>
                 </tr>
               );
             })}
@@ -291,7 +324,10 @@ export default function SimulatorPage() {
       </div>
 
       <div style={{ marginTop: 10, opacity: 0.7, fontSize: 12 }}>
-        Note: Yahoo intraday history is limited. Older dates may show NO_DATA even if the stock traded.
+        <b>NOTE:</b> Yahoo intraday history is limited. Older dates may show NO_DATA even if the stock traded.
+        <br/><b>MFE:</b> (Maximum Favorable Excursion). A metric that measures the highest amount of 
+        unrealized profit a trade reached while it was open, before closing.
+        <br/><b>MAE:</b> (Maximum Adverse Excursion). A metric which measures the maximum loss a trade faced before closing. 
       </div>
     </div>
   );

@@ -178,13 +178,14 @@ export default function MomentumDashboard() {
         <div>
           <h1 className={styles.title}>Momentum Scanner Dashboard</h1>
             <Link to="/config" 
-            className={`${styles.calcLink} ${styles.tooltip}`}
-            data-tooltip="Config"
+              className={`${styles.calcLink} ${styles.tooltip}`}
+              data-tooltip="Config"
             >
               ⚙ Config
             </Link><br/> 
             <Link to="/simulator" 
               className={`${styles.calcLink} ${styles.tooltip}`}
+              target="_blank"
             >
               Simulator
             </Link> 
@@ -264,7 +265,6 @@ function Card({ stock, outcomesMapRef  }) {
       role="button"
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && window.open(defaultNewsUrl, "_blank")}
-      
     >
       <h3 style={{ marginTop: 0 }}>{stock.Ticker}</h3>
       {/*<div style={{ fontSize: 10, color: "#999" }}>
