@@ -21,6 +21,9 @@
     },
     "appsettings": {
       "$ref": "#/$defs/appsettingsBlock"
+    },
+    "simulator": {
+      "$ref": "#/$defs/simulatorBlock"
     }
   },
   "$defs": {
@@ -159,6 +162,212 @@
           "description": "Determines Page Theme."
         }
       }
+    },
+    "themeEnum": {
+      "type": "string",
+      "description": "Theme Options (dark, light)",
+      "oneOf": [
+        {
+          "const": "dark",
+          "description": "Dark Theme"
+        },
+        {
+          "const": "light",
+          "description": "Light Theme"
+        }
+      ]
+    },
+    "simulatorBlock": {
+      "type": "object",
+      "description": "Simulator defaults for historical day runner (UI + API).",
+      "required": [
+        "enabled",
+        "bar_interval_default",
+        "default_entry_mode",
+        "entry_fill_default",
+        "profit_pct_default",
+        "conflict_policy",
+        "use_stop_default",
+        "min_score_default",
+        "session_start",
+        "session_end",
+        "max_recs_per_run",
+        "outcome_priority"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable the simulator UI and endpoints."
+        },
+        "bar_interval_default": {
+          "$ref": "#/$defs/barIntervalEnum",
+          "default": "1m",
+          "description": "Default intraday bar interval for Yahoo/yfinance."
+        },
+        "default_entry_mode": {
+          "$ref": "#/$defs/entryModeEnum",
+          "default": "limit",
+          "description": "Default entry mode for simulation: limit (pullback), stop (breakout), market."
+        },
+        "entry_fill_default": {
+          "$ref": "#/$defs/entryFillEnum",
+          "default": "mid",
+          "description": "How to fill within EntryLow/EntryHigh for limit entries."
+        },
+        "profit_pct_default": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 2.0,
+          "default": 0.15,
+          "description": "Percent target used as an additional tuning metric. 0.15 = 15%."
+        },
+        "conflict_policy": {
+          "$ref": "#/$defs/conflictPolicyEnum",
+          "default": "worst_case",
+          "description": "When stop and target are both touched in the same candle: worst_case assumes stop first; best_case assumes target first."
+        },
+        "use_stop_default": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether to check stop hits by default."
+        },
+        "min_score_default": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0,
+          "description": "Default min score filter for UI results table."
+        },
+        "session_start": {
+          "type": "string",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d(:[0-5]\\d)?$",
+          "default": "09:30",
+          "description": "Default session start time (ET) for simulations."
+        },
+        "session_end": {
+          "type": "string",
+          "pattern": "^([01]\\d|2[0-3]):[0-5]\\d(:[0-5]\\d)?$",
+          "default": "16:00",
+          "description": "Default session end time (ET) for simulations."
+        },
+        "max_recs_per_run": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 50,
+          "description": "Safety limit for batch runs."
+        },
+        "outcome_priority": {
+          "type": "array",
+          "description": "Determines which hit counts as the 'Outcome' when multiple events occur (earliest timestamp wins; tie resolved by priority order).",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/outcomeItemEnum"
+          },
+          "default": [
+            "STOP",
+            "PCT",
+            "T2",
+            "T1"
+          ]
+        }
+      }
+    },
+    "barIntervalEnum": {
+      "type": "string",
+      "description": "Supported intraday bar intervals for yfinance.",
+      "oneOf": [
+        {
+          "const": "1m",
+          "description": "1 minute"
+        },
+        {
+          "const": "2m",
+          "description": "2 minutes"
+        },
+        {
+          "const": "5m",
+          "description": "5 minutes"
+        },
+        {
+          "const": "15m",
+          "description": "15 minutes"
+        }
+      ]
+    },
+    "entryModeEnum": {
+      "type": "string",
+      "description": "Simulator entry mode.",
+      "oneOf": [
+        {
+          "const": "limit",
+          "description": "Limit (pullback into EntryLow..EntryHigh zone)"
+        },
+        {
+          "const": "stop",
+          "description": "Stop (breakout above EntryLow)"
+        },
+        {
+          "const": "market",
+          "description": "Market (next bar open)"
+        }
+      ]
+    },
+    "entryFillEnum": {
+      "type": "string",
+      "description": "How the simulator chooses a fill price inside the entry zone.",
+      "oneOf": [
+        {
+          "const": "low",
+          "description": "Use EntryLow"
+        },
+        {
+          "const": "mid",
+          "description": "Use midpoint (EntryLow+EntryHigh)/2"
+        },
+        {
+          "const": "high",
+          "description": "Use EntryHigh"
+        }
+      ]
+    },
+    "conflictPolicyEnum": {
+      "type": "string",
+      "description": "How to resolve same-candle stop vs target conflicts.",
+      "oneOf": [
+        {
+          "const": "worst_case",
+          "description": "Assume stop hit first (conservative)"
+        },
+        {
+          "const": "best_case",
+          "description": "Assume target hit first (optimistic)"
+        }
+      ]
+    },
+    "outcomeItemEnum": {
+      "type": "string",
+      "description": "Outcome event types for simulator reporting.",
+      "oneOf": [
+        {
+          "const": "STOP",
+          "description": "Stop hit"
+        },
+        {
+          "const": "T1",
+          "description": "Target1 hit"
+        },
+        {
+          "const": "T2",
+          "description": "Target2 hit"
+        },
+        {
+          "const": "PCT",
+          "description": "Percent target hit"
+        }
+      ]
     },
     "priceRangeEnum": {
       "type": "string",
@@ -946,20 +1155,6 @@
           }
         ]
       }
-    },
-    "themeEnum": {
-      "type": "string",
-      "description": "Theme Options (dark, light)",
-      "oneOf": [
-        {
-          "const": "dark",
-          "description": "Dark Theme"
-        },
-        {
-          "const": "light",
-          "description": "Light Theme"
-        }
-      ]
     }
   }
 }

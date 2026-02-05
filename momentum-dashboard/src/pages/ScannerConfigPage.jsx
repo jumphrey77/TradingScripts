@@ -298,6 +298,10 @@ export default function ScannerConfigPage() {
     ? resolveRef(schema, schema.properties.appsettings.$ref)
     : schema.properties?.appsettings;
 
+  const simulatorDef = schema.properties?.simulator?.$ref
+    ? resolveRef(schema, schema.properties.simulator.$ref)
+    : schema.properties?.simulator;
+
   async function onSave() {
     setSaving(true);
     setSaveResult(null);
@@ -438,9 +442,10 @@ function BackButtonComponent() {
         gridTemplateColumns: cols === 3 ? "1fr 1fr 1fr" : cols === 2 ? "1fr 1fr" : "1fr",
       }}
     >
-      {renderObjectBlock("Finviz", ["finviz"], finvizDef)}
-      {renderObjectBlock("Scanner", ["scanner"], scannerDef)}
+      {renderObjectBlock("Finviz Settings", ["finviz"], finvizDef)}
+      {renderObjectBlock("Scanner Settings", ["scanner"], scannerDef)}
       {renderObjectBlock("App Settings", ["appsettings"], appDef)}
+      {renderObjectBlock("Simulator Settings", ["simulator"], simulatorDef)}
     </div>
 
     </div>

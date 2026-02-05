@@ -26,5 +26,24 @@
     "price_min": 1,
     "relvol": 2,
     "score_min": 200
+  },
+  "simulator": {
+    "bar_interval_default": "1m",
+    "conflict_policy": "worst_case",
+    "default_entry_mode": "limit",
+    "enabled": true,
+    "entry_fill_default": "mid",
+    "max_recs_per_run": 55,
+    "min_score_default": 400,
+    "outcome_priority": [
+      "STOP",
+      "PCT",
+      "T2",
+      "T1"
+    ],
+    "profit_pct_default": 0.15,
+    "session_end": "16:00",
+    "session_start": "09:30",
+    "use_stop_default": true
   }
 }
