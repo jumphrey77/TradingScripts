@@ -4,7 +4,7 @@
     "Debug": false,
     "DebugAPI": false,
     "DefaultTheme": "light",
-    "OutputSymbolAnalysis": true,
+    "OutputSymbolAnalysis": false,
     "UsePreMarketData": true
   },
   "finviz": {
@@ -23,14 +23,14 @@
     "atr": 8,
     "gap": 5,
     "price_max": 20,
-    "price_min": 1,
+    "price_min": 0.6,
     "relvol": 2,
     "score_min": 200
   },
   "simulator": {
     "bar_interval_default": "1m",
     "conflict_policy": "worst_case",
-    "default_entry_mode": "limit",
+    "default_entry_mode": "market",
     "enabled": true,
     "entry_fill_default": "mid",
     "max_recs_per_run": 55,

@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import styles from "../styles/SimulatorPage.module.css";
+import {fmtPct, fmtTime, toNumMaybe} from '../utils/formaters'
 
 function parseTSV(tsvText) {
   const lines = tsvText.split(/\r?\n/).filter(Boolean);
@@ -16,13 +17,9 @@ function parseTSV(tsvText) {
     });
 
     // Convert known numeric columns to numbers (backend is defensive, but this helps)
-    const toNum = (v) => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : v;
-    };
 
     ["Premarket","Gap %","RelVol","ATR %","Score","EntryLow","EntryHigh","Stop","Target1","Target2","RR_T1","RR_T2"]
-      .forEach(k => { if (row[k] !== undefined) row[k] = toNum(row[k]); });
+      .forEach(k => { if (row[k] !== undefined) row[k] = toNumMaybe(row[k]); });
 
     // Normalize keys to match backend expectations exactly:
     recs.push({
@@ -41,45 +38,285 @@ function parseTSV(tsvText) {
   return recs;
 }
 
-function fmtPct(x) {
-  if (x == null || !Number.isFinite(x)) return "";
-  return `${(x * 100).toFixed(1)}%`;
-}
-function fmtTime(iso) {
-  if (!iso) return "";
-  try {
-    const d = new Date(iso);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return iso;
+function inferDateTimeFromScanTimestamp(ts) {
+  if (!ts) return { date: null, time: null };
+  const s = String(ts).trim();
+
+  // Common forms:
+  // 2026-02-03 08:44:00
+  // 2026-02-03T08:44:00
+  // 02/03/2026 08:44
+  // 2026-02-03 08:44
+
+  // ISO-ish
+  const iso = s.replace(" ", "T");
+  const d = new Date(iso);
+  if (!Number.isNaN(d.getTime())) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const min = String(d.getMinutes()).padStart(2, "0");
+    return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${min}` };
   }
+
+  // Fallback regex: YYYY-MM-DD HH:MM
+  const m = s.match(/(20\d{2})-(\d{2})-(\d{2}).*?(\d{1,2}):(\d{2})/);
+  if (m) {
+    const hh = String(m[4]).padStart(2, "0");
+    return { date: `${m[1]}-${m[2]}-${m[3]}`, time: `${hh}:${m[5]}` };
+  }
+
+  return { date: null, time: null };
+}
+
+function parseCSV(text) {
+  // Simple CSV parser that handles quoted fields.
+  const rows = [];
+  let cur = "";
+  let inQuotes = false;
+  let row = [];
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (ch === '"' && inQuotes && next === '"') { // escaped quote
+      cur += '"';
+      i++;
+    } else if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === "," && !inQuotes) {
+      row.push(cur);
+      cur = "";
+    } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
+      if (ch === "\r" && next === "\n") i++;
+      row.push(cur);
+      rows.push(row);
+      cur = "";
+      row = [];
+    } else {
+      cur += ch;
+    }
+  }
+  // last cell
+  if (cur.length > 0 || row.length > 0) {
+    row.push(cur);
+    rows.push(row);
+  }
+  return rows;
 }
 
 export default function SimulatorPage() {
   const [date, setDate] = useState("");
-  const [signalTime, setSignalTime] = useState("08:00:00");
+  const [signalTime, setSignalTime] = useState("08:00");
   const [barInterval, setBarInterval] = useState("1m");
-
   const [entryMode, setEntryMode] = useState("limit");     // default #2
   const [entryFill, setEntryFill] = useState("mid");       // low|mid|high
   const [profitPct, setProfitPct] = useState(0.15);        // configurable 15%
-
   const [useStop, setUseStop] = useState(true);
   const [conflictPolicy, setConflictPolicy] = useState("worst_case");
-
   const [tsv, setTsv] = useState("");
   const recs = useMemo(() => parseTSV(tsv), [tsv]);
-
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState(null);
   const [results, setResults] = useState([]);
-
   const [minScore, setMinScore] = useState("");
   const filteredResults = useMemo(() => {
     const ms = Number(minScore);
     if (!Number.isFinite(ms)) return results;
     return results.filter(r => (Number(r.score) || 0) >= ms);
   }, [results, minScore]);
+
+  const [cfgLoading, setCfgLoading] = useState(false);
+  const [cfgError, setCfgError] = useState(null);
+  const [simDefaults, setSimDefaults] = useState(null);
+  const didInitFromConfigRef = useRef(false);   // IMPORTANT: don’t clobber user edits after initial load
+  const fileInputRef = useRef(null);
+  const maxRecs = simDefaults?.max_recs_per_run ?? 50;
+  const recsCapped = recs.slice(0, maxRecs);
+  const [overrideDefaults, setOverrideDefaults] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadConfig() {
+      setCfgLoading(true);
+      setCfgError(null);
+      try {
+        const res = await fetch("/api/config");
+        const text = await res.text();
+        const conf = JSON.parse(text);
+
+        const sim = conf?.simulator || null;
+
+        if (!cancelled) {
+          setSimDefaults(sim);
+
+          // Apply defaults ONCE
+          if (sim && !didInitFromConfigRef.current) {
+            didInitFromConfigRef.current = true;
+
+            // Defaults from config (fallback to existing UI defaults)
+            setBarInterval(sim.bar_interval_default ?? "1m");
+            setEntryMode(sim.default_entry_mode ?? "limit");
+            setEntryFill(sim.entry_fill_default ?? "mid");
+            setProfitPct(
+              typeof sim.profit_pct_default === "number" ? sim.profit_pct_default : 0.15
+            );
+            setConflictPolicy(sim.conflict_policy ?? "worst_case");
+            setUseStop(
+              typeof sim.use_stop_default === "boolean" ? sim.use_stop_default : true
+            );
+
+            // Min score filter
+            setMinScore(
+              sim.min_score_default != null ? String(sim.min_score_default) : ""
+            );
+
+            // Optional: use session_start as the default signal time
+            if (sim.session_start) {
+              setSignalTime(sim.session_start);
+            }
+          }
+        }
+      } catch (e) {
+        if (!cancelled) setCfgError(String(e?.message || e));
+      } finally {
+        if (!cancelled) setCfgLoading(false);
+      }
+    }
+
+    loadConfig();
+    return () => { cancelled = true; };
+  }, []);
+
+  function csvRowsToRecsAndMeta(rows) {
+    if (!rows || rows.length < 2) return { recs: [], scanTimestamp: null };
+
+    const headers = rows[0].map(h => String(h || "").trim());
+    const idx = (name) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+    const get = (r, name) => {
+      const i = idx(name);
+      return i >= 0 ? r[i] : "";
+    };
+
+    let scanTimestamp = null;
+    const recs = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r || r.length === 0) continue;
+
+      const ticker = get(r, "Ticker");
+      if (!String(ticker || "").trim()) continue;
+
+      // Capture scan timestamp from first non-empty row
+      const ts = get(r, "ScanTimestamp");
+      if (!scanTimestamp && ts) scanTimestamp = String(ts).trim();
+
+      recs.push({
+        Ticker: ticker,
+        Premarket: toNumMaybe(get(r, "Premarket")),
+        "Gap %": toNumMaybe(get(r, "Gap %")),
+        "Gap Dir": get(r, "Gap Dir"),
+        RelVol: toNumMaybe(get(r, "RelVol")),
+        "ATR %": toNumMaybe(get(r, "ATR %")),
+        Score: toNumMaybe(get(r, "Score")),
+        Chart: get(r, "Chart").slice(0, 6), /* JDU reduce length */
+        NEW: get(r, "NEW"),
+        Pattern: get(r, "Pattern").slice(0, 6), /* JDU reduce length */
+        EntryLow: toNumMaybe(get(r, "EntryLow")),
+        EntryHigh: toNumMaybe(get(r, "EntryHigh")),
+        Stop: toNumMaybe(get(r, "Stop")),
+        Target1: toNumMaybe(get(r, "Target1")),
+        Target2: toNumMaybe(get(r, "Target2")),
+        RR_T1: toNumMaybe(get(r, "RR_T1")),
+        RR_T2: toNumMaybe(get(r, "RR_T2")),
+        MomentumScore: toNumMaybe(get(r, "MomentumScore")),
+        SignalId: get(r, "SignalId").slice(0, 6), /* JDU reduce length */
+        ScanTimestamp: ts
+      });
+    }
+
+    return { recs, scanTimestamp };
+  }
+
+  function inferDateTimeFromFilename(name) {
+    const s = String(name || "");
+
+    // 1) YYYY-MM-DD and HHMM or HH:MM or HH-MM
+    const m1 = s.match(/(20\d{2})[-_](\d{2})[-_](\d{2}).*?(\d{1,2})[:\-]?(\d{2})/);
+    if (m1) {
+      const yyyy = m1[1], mm = m1[2], dd = m1[3];
+      const hh = String(m1[4]).padStart(2, "0");
+      const min = m1[5];
+      return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${min}` };
+    }
+
+    // 2) YYYYMMDD and HHMM
+    const m2 = s.match(/(20\d{2})(\d{2})(\d{2}).*?(\d{2})(\d{2})/);
+    if (m2) {
+      const yyyy = m2[1], mm = m2[2], dd = m2[3];
+      const hh = m2[4], min = m2[5];
+      return { date: `${yyyy}-${mm}-${dd}`, time: `${hh}:${min}` };
+    }
+
+    // 3) Date only
+    const m3 = s.match(/(20\d{2})[-_](\d{2})[-_](\d{2})/);
+    if (m3) {
+      return { date: `${m3[1]}-${m3[2]}-${m3[3]}`, time: null };
+    }
+
+    return { date: null, time: null };
+  }
+
+  async function handleLoadCsv(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const rows = parseCSV(text);
+
+      const { recs: recsFromCsv, scanTimestamp } = csvRowsToRecsAndMeta(rows);
+
+      // Convert to TSV (so you keep your existing parseTSV pipeline unchanged)
+      // Include exactly the headers your parseTSV expects.
+      //const headers = [
+      //  "Ticker","Premarket","Gap %","Gap Dir","RelVol","ATR %","Score","Chart","NEW","Pattern",
+      //  "EntryLow","EntryHigh","Stop","Target1","Target2","RR_T1","RR_T2","MomentumScore","SignalId","ScanTimestamp"
+      //];
+      const headers = [
+        "Ticker","Premarket","Gap %","Gap Dir","RelVol","ATR %","Score",
+        "EntryLow","EntryHigh","Stop","Target1","Target2","RR_T1","RR_T2", "ScanTimestamp"
+      ];
+
+      const tsvOut = [
+        headers.join("\t"),
+        ...recsFromCsv.map(r => headers.map(h => (r[h] ?? "")).join("\t"))
+      ].join("\n");
+
+      setTsv(tsvOut);
+
+      // Prefer ScanTimestamp for auto date/time
+      const inferred = inferDateTimeFromScanTimestamp(scanTimestamp);
+      if (inferred.date) setDate(inferred.date);
+      if (inferred.time) setSignalTime(inferred.time);
+
+      // Fallback to filename if ScanTimestamp wasn't usable
+      if (!inferred.date || !inferred.time) {
+        const guess = inferDateTimeFromFilename(file.name);
+        if (!inferred.date && guess.date) setDate(guess.date);
+        if (!inferred.time && guess.time) setSignalTime(guess.time);
+      }
+
+    } catch (err) {
+      setSummary({ error: `CSV load failed: ${String(err?.message || err)}` });
+    } finally {
+      e.target.value = "";
+    }
+  }
 
   async function runBatch() {
     setLoading(true);
@@ -95,13 +332,13 @@ export default function SimulatorPage() {
             signal_time: signalTime,
             bar_interval: barInterval,
             cfg: {
-            entry_mode: entryMode,
-            entry_fill: entryFill,
-            profit_pct: profitPct,
-            use_stop: useStop,
-            conflict_policy: conflictPolicy
-            },
-            recs
+              entry_mode: entryMode,
+              entry_fill: entryFill,
+              profit_pct: profitPct,
+              use_stop: useStop,
+              conflict_policy: conflictPolicy
+              },
+            recs: recsCapped 
         })
         });
 
@@ -132,6 +369,28 @@ export default function SimulatorPage() {
   return (
     <div style={{ padding: 16 }}>
       <h2 style={{ marginBottom: 8 }}>Simulator</h2>
+      {cfgLoading && <div style={{ opacity: 0.7, marginBottom: 8 }}>Loading config…</div>}
+      {cfgError && <div style={{ color: "crimson", marginBottom: 8 }}>Config load error: {cfgError}</div>}
+      {simDefaults && !cfgLoading && !cfgError && (
+        <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
+          Defaults loaded from config.simulator
+        </div>
+      )}
+      {!overrideDefaults && simDefaults && (
+        <div style={{ gridColumn: "1 / -1", fontSize: 12, opacity: 0.75 }}>
+          Using config: interval <b>{barInterval}</b>, profit <b>{Math.round(profitPct*100)}%</b>, policy <b>{conflictPolicy}</b>, min score <b>{minScore || "0"}</b>
+        </div>
+      )}
+      <div style={{ display: "flex", alignItems: "end", gap: 8 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={overrideDefaults}
+            onChange={e => setOverrideDefaults(e.target.checked)}
+          />
+          Override config defaults
+        </label>
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(160px, 1fr))", gap: 10, marginBottom: 12 }}>
         <div>
@@ -155,16 +414,42 @@ export default function SimulatorPage() {
             style={{ width: "100%", padding: 8 }} 
         />
         </div>
-        <div>
-          <div>Bar Interval</div>
-          <select value={barInterval} onChange={e => setBarInterval(e.target.value)} style={{ width: "100%", padding: 8 }}>
-            <option value="1m">1m</option>
-            <option value="2m">2m</option>
-            <option value="5m">5m</option>
-            <option value="15m">15m</option>
-          </select>
-        </div>
-
+        {overrideDefaults && (
+          <>
+            <div>
+              <div>Bar Interval</div>
+              <select value={barInterval} onChange={e => setBarInterval(e.target.value)} style={{ width: "100%", padding: 8 }}>
+                <option value="1m">1m</option>
+                <option value="2m">2m</option>
+                <option value="5m">5m</option>
+                <option value="15m">15m</option>
+              </select>
+            </div>
+             <div>
+              <div>Profit Target %</div>
+              <input
+                type="number"
+                step="0.01"
+                value={profitPct}
+                onChange={e => setProfitPct(Number(e.target.value))}
+                style={{ width: "100%", padding: 8 }}
+              />
+              <div style={{ fontSize: 12, opacity: 0.8 }}>0.15 = 15%</div>
+            </div>
+            <div>
+              <div>Conflict Policy</div>
+              <select value={conflictPolicy} onChange={e => setConflictPolicy(e.target.value)} style={{ width: "100%", padding: 8 }}>
+                <option value="worst_case">Worst-case (stop wins)</option>
+                <option value="best_case">Best-case (target wins)</option>
+              </select>
+            </div>
+             <div>
+              <div>Min Score Filter</div>
+              <input value={minScore} onChange={e => setMinScore(e.target.value)} placeholder="e.g. 5000" style={{ width: "100%", padding: 8 }} />
+            </div>
+          </>
+        )}
+        
         <div>
           <div>Entry Mode</div>
           <select value={entryMode} onChange={e => setEntryMode(e.target.value)} style={{ width: "100%", padding: 8 }}>
@@ -183,26 +468,6 @@ export default function SimulatorPage() {
           </select>
         </div>
 
-        <div>
-          <div>Profit Target %</div>
-          <input
-            type="number"
-            step="0.01"
-            value={profitPct}
-            onChange={e => setProfitPct(Number(e.target.value))}
-            style={{ width: "100%", padding: 8 }}
-          />
-          <div style={{ fontSize: 12, opacity: 0.8 }}>0.15 = 15%</div>
-        </div>
-
-        <div>
-          <div>Conflict Policy</div>
-          <select value={conflictPolicy} onChange={e => setConflictPolicy(e.target.value)} style={{ width: "100%", padding: 8 }}>
-            <option value="worst_case">Worst-case (stop wins)</option>
-            <option value="best_case">Best-case (target wins)</option>
-          </select>
-        </div>
-
         <div style={{ display: "flex", alignItems: "end", gap: 8 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input type="checkbox" checked={useStop} onChange={e => setUseStop(e.target.checked)} />
@@ -210,23 +475,42 @@ export default function SimulatorPage() {
           </label>
         </div>
 
-        <div>
-          <div>Min Score Filter</div>
-          <input value={minScore} onChange={e => setMinScore(e.target.value)} placeholder="e.g. 5000" style={{ width: "100%", padding: 8 }} />
-        </div>
-
         <div style={{ display: "flex", alignItems: "end" }}>
           <button 
             onClick={runBatch} 
             disabled={loading || !date || recs.length === 0} 
             style={{ padding: "10px 14px", width: "100%" }}>
-            {loading ? "Running..." : `Run Batch (${recs.length})`}
+            {loading ? "Running..." : `Run Batch (${Math.min(recs.length, maxRecs)} of ${recs.length})`}
           </button>
         </div>
+        {recs.length > maxRecs && (
+          <div style={{ color: "crimson", fontSize: 12 }}>
+            Pasted {recs.length} rows. Config max is {maxRecs}. Only the first {maxRecs} will run.
+          </div>
+        )}
+
+      </div>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 6 }}>
+        <div>Paste Recommendations (TSV) or load CSV</div>
+
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          style={{ padding: "6px 10px" }}
+        >
+          Load CSV…
+        </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          style={{ display: "none" }}
+          onChange={handleLoadCsv}
+        />
       </div>
 
       <div style={{ marginBottom: 10 }}>
-        <div style={{ marginBottom: 6 }}>Paste Recommendations (TSV from your table)</div>
         <textarea
           value={tsv}
           onChange={e => setTsv(e.target.value)}
@@ -234,7 +518,7 @@ export default function SimulatorPage() {
           style={{ width: "100%", height: 180, padding: 10, fontFamily: "monospace" }}
         />
         <div style={{ marginTop: 6, opacity: 0.8, fontSize: 12 }}>
-          Parsed rows: <b>{recs.length}</b>
+          Parsed rows: <b>{recs.length}</b>  Showing simulator columns only (7 of 20 fields)
         </div>
       </div>
 

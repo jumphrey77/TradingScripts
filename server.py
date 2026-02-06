@@ -487,7 +487,13 @@ def apply_trade_sanity(row):
 
 def persist_scan(df, ts_str):
     safe_ts = ts_str.replace(":", "").replace(" ", "_")
-    scan_path = os.path.join(config.SCAN_DIR, f"scan_{safe_ts}.csv")
+
+    #Use Sub Directories
+    daydirname = datetime.now().strftime("%Y-%m-%d")
+    daypath = os.path.join(config.SCAN_DIR, daydirname)
+    os.makedirs(daypath, exist_ok=True)
+    scan_path = os.path.join(config.SCAN_DIR, daydirname, f"scan_{safe_ts}.csv")
+    
     df.to_csv(scan_path, index=False)
 
     log_path = os.path.join(config.SIGNAL_DIR, "signals_log.csv")
