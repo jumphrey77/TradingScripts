@@ -4,7 +4,7 @@
     "Debug": false,
     "DebugAPI": false,
     "DefaultTheme": "light",
-    "OutputSymbolAnalysis": false,
+    "OutputSymbolAnalysis": true,
     "UsePreMarketData": true
   },
   "finviz": {
@@ -13,7 +13,8 @@
     "curvol": "o50",
     "float": "",
     "ignoresectors": [
-      ""
+      "financial",
+      "utilities"
     ],
     "news": "sinceyesterday",
     "price": "u20",
@@ -23,7 +24,7 @@
     "atr": 8,
     "gap": 5,
     "price_max": 20,
-    "price_min": 0.6,
+    "price_min": 0.39,
     "relvol": 2,
     "score_min": 200
   },

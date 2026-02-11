@@ -117,25 +117,30 @@ export default function SimulatorPage() {
   const [useStop, setUseStop] = useState(true);
   const [conflictPolicy, setConflictPolicy] = useState("worst_case");
   const [tsv, setTsv] = useState("");
-  const recs = useMemo(() => parseTSV(tsv), [tsv]);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState(null);
   const [results, setResults] = useState([]);
   const [minScore, setMinScore] = useState("");
+  const [cfgLoading, setCfgLoading] = useState(false);
+  const [cfgError, setCfgError] = useState(null);
+  const [simDefaults, setSimDefaults] = useState(null);
+  const [overrideDefaults, setOverrideDefaults] = useState(false);
+  const [csvColumnCount, setCsvColumnCount] = useState(null);
+
+  const recs = useMemo(() => parseTSV(tsv), [tsv]);
   const filteredResults = useMemo(() => {
     const ms = Number(minScore);
     if (!Number.isFinite(ms)) return results;
     return results.filter(r => (Number(r.score) || 0) >= ms);
   }, [results, minScore]);
 
-  const [cfgLoading, setCfgLoading] = useState(false);
-  const [cfgError, setCfgError] = useState(null);
-  const [simDefaults, setSimDefaults] = useState(null);
   const didInitFromConfigRef = useRef(false);   // IMPORTANT: don’t clobber user edits after initial load
   const fileInputRef = useRef(null);
+
   const maxRecs = simDefaults?.max_recs_per_run ?? 50;
   const recsCapped = recs.slice(0, maxRecs);
-  const [overrideDefaults, setOverrideDefaults] = useState(false);
+
+
 
   useEffect(() => {
     let cancelled = false;
@@ -278,6 +283,8 @@ export default function SimulatorPage() {
     try {
       const text = await file.text();
       const rows = parseCSV(text);
+
+      setCsvColumnCount(rows?.[0]?.length || null);
 
       const { recs: recsFromCsv, scanTimestamp } = csvRowsToRecsAndMeta(rows);
 
@@ -492,7 +499,17 @@ export default function SimulatorPage() {
       </div>
       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 6 }}>
         <div>Paste Recommendations (TSV) or load CSV</div>
-
+        {csvColumnCount && (
+              <div style={{
+                fontSize: 12,
+                opacity: 0.7,
+                background: "rgba(120,120,120,0.15)",
+                padding: "4px 8px",
+                borderRadius: 6
+              }}>
+                Showing simulator columns only (7 of {csvColumnCount} fields)
+              </div>
+            )}
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
