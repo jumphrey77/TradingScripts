@@ -25,7 +25,6 @@ def safe_float(x, default=0.0):
     except Exception:
         return default
 
-
 def nullable_float(x, default=None):
     """
     Convert to float, but preserve None for missing values.
@@ -59,7 +58,6 @@ def safe_int(x, default=0):
     except Exception:
         return default
 
-
 def sanitize_df_for_json_bak(df: pd.DataFrame) -> pd.DataFrame:
     """
     Ensure numpy/pandas scalars become JSON-friendly primitives.
@@ -89,8 +87,6 @@ def sanitize_df_for_json(df: pd.DataFrame) -> pd.DataFrame:
         clean[col] = clean[col].map(fix)
 
     return clean
-
-
 
 def et_now_str() -> str:
     """

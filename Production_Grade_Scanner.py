@@ -20,10 +20,8 @@ from utils import safe_float, safe_int
 # USER SETTINGS
 # ===========================
 
-
 REQUEST_DELAY = 1.2
 MAX_RESULTS = 400
-
 MAX_WORKERS = 1
 REFRESH_SECONDS = 60
 
@@ -43,17 +41,18 @@ HEADERS = {
 _last_mtime = 0
 
 def load_finviz_config():
-#    global _last_mtime
-#
-#    mtime = config.CONFIG_FILE.stat().st_mtime
-#    if mtime != _last_mtime:
-#        _last_mtime = mtime
-#        print("🔁 NEW Finviz Config Reloaded")
-#TODO Fix Debug This
+    global _last_mtime, _cached_config
 
-    with open(file=config.CONFIG_FILE, mode="r") as f:
-        return json.load(f)
+    mtime = Path(config.CONFIG_FILE).stat().st_mtime
 
+    if mtime != _last_mtime:
+        if _last_mtime != 0:
+            print("🔁 Finviz Config Reloaded")
+        _last_mtime = mtime
+        with open(file=config.CONFIG_FILE, mode="r") as f:
+            _cached_config = json.load(f)
+
+    return _cached_config
 
 def finviz_url_from_config(cfg):
 
@@ -219,7 +218,6 @@ def fetch_finviz_page(start, url):
             return t
 
     return None
-
 
 # ===========================
 # YAHOO METRICS (FAST)
@@ -398,6 +396,11 @@ def scan(return_df=False):
     debug(f"\nDone Fetching Finviz Pages")
     debug(f"   URL: {url}")
 
+    if not pages:
+        debug("No pages fetched — skipping scan")
+        return pd.DataFrame() if return_df else None
+
+    #todo crashes
     finviz_df_all = pd.concat(pages)
 
     # Filter Out Unwanted Sectors
@@ -536,7 +539,13 @@ if __name__ == "__main__":
     previous_symbols = set()
 
     while True:
+
         df = scan()
+
+        if df is None or df.empty:
+            print("⚠️ No results returned, skipping this cycle")
+            time.sleep(REFRESH_SECONDS)
+            continue
 
         # New tickers logic
         current_symbols = set(df["Ticker"])

@@ -34,13 +34,13 @@ OUTCOME_REFRESH_SECONDS = 30
 
 STATE_LOCK = threading.Lock()
 
+LAST_PUBLISH_TS = None
+
 # Ensure dirs exist
 os.makedirs(config.EVENT_DIR, exist_ok=True)
 os.makedirs(config.SCAN_DIR, exist_ok=True)
 os.makedirs(config.SIGNAL_DIR, exist_ok=True)
 os.makedirs(config.EXPORTS_DIR, exist_ok=True)
-#TODO Make SubDir
-
 
 # -----------------------------
 # Simulator helpers
@@ -489,7 +489,8 @@ def persist_scan(df, ts_str):
     safe_ts = ts_str.replace(":", "").replace(" ", "_")
 
     #Use Sub Directories
-    daydirname = datetime.now().strftime("%Y-%m-%d")
+    daydirname = datetime.now(NY).strftime("%Y-%m-%d")
+
     daypath = os.path.join(config.SCAN_DIR, daydirname)
     os.makedirs(daypath, exist_ok=True)
     scan_path = os.path.join(config.SCAN_DIR, daydirname, f"scan_{safe_ts}.csv")
@@ -511,12 +512,21 @@ def scanner_worker():
             print("🔄 Running scheduled scan...")
 
             df = scan(return_df=True)
+            
             if df is None or len(df) == 0:
                 print("ℹ️ No rows returned from scan()")
                 time.sleep(REFRESH_SECONDS)
                 continue
 
-            current_symbols = set(df["Ticker"].astype(str))
+            dups = df["Ticker"].astype(str).duplicated().sum()
+            print("Ticker duplicates in raw scan():", dups)
+
+            df["Ticker"] = df["Ticker"].astype(str).str.upper().str.strip()
+            df = df[df["Ticker"] != ""]
+            df = df[df["Ticker"] != "NAN"]
+
+            current_symbols = set(df["Ticker"])
+
             new_symbols = current_symbols - PREVIOUS_SYMBOLS
             df["NEW"] = df["Ticker"].astype(str).apply(lambda t: t in new_symbols)
 
@@ -542,12 +552,19 @@ def scanner_worker():
                 for t in new_active:
                     ACTIVE_SIGNALS[t] = {"SignalId": str(uuid.uuid4()), "ScanTimestamp": now_ts}
 
+                # 1) SignalId stays stable while active (optional)
                 df["SignalId"] = df["Ticker"].astype(str).map(lambda t: ACTIVE_SIGNALS[t]["SignalId"])
-                df["ScanTimestamp"] = df["Ticker"].astype(str).map(lambda t: ACTIVE_SIGNALS[t]["ScanTimestamp"])
+                
+                # 2) ScanTimestamp is ALWAYS the scan cycle time
+                df["ScanTimestamp"] = now_ts
+
+                # 3) Keep the old meaning under a new name (optional but useful)
+                df["SignalStartTimestamp"] = df["Ticker"].astype(str).map(lambda t: ACTIVE_SIGNALS[t]["ScanTimestamp"])
 
                 persist_scan(df, now_ts)
 
                 LATEST_DF = df
+                LAST_PUBLISH_TS = now_ts
                 PREVIOUS_SYMBOLS = current_symbols
 
             if new_symbols:
@@ -629,9 +646,10 @@ def api_config():
 def api_scan():
     with STATE_LOCK:
         df_local = None if LATEST_DF is None else LATEST_DF.copy()
+        ts_local = LAST_PUBLISH_TS
 
     if df_local is None:
-        return jsonify({"rows": [], "timestamp": None})
+        return jsonify({"rows": [], "timestamp": ts_local})
 
     clean_df = sanitize_df_for_json(df_local)
     #safe = clean_df.where(pd.notnull(clean_df), None)
