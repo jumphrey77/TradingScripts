@@ -27,13 +27,14 @@ import pandas as pd
 # yfinance is what you're already using
 import yfinance as yf
 
-try:
-    # Python 3.9+
-    from zoneinfo import ZoneInfo
-except Exception:
-    ZoneInfo = None
+#TDDO Delete This
+#try:
+#    # Python 3.9+
+#    from zoneinfo import ZoneInfo
+#except Exception:
+#    ZoneInfo = None
+#NY_TZ = "America/New_York"
 
-NY_TZ = "America/New_York"
 NY = ZoneInfo("America/New_York")
 
 _ET = re.compile(r"\s+ET\s*$", re.IGNORECASE)
@@ -136,9 +137,10 @@ def parse_scan_ts(x):
 def dt_to_datestr(d: date) -> str:
     return d.strftime("%Y-%m-%d")
 
-def cache_key(symbol: str, d: date, interval: str) -> str:
-    raw = f"{symbol}|{dt_to_datestr(d)}|{interval}"
-    return hashlib.md5(raw.encode("utf-8")).hexdigest()
+def cache_key(symbol: str, d: date, interval: str, auto_adjust: bool = False, prepost: bool = False) -> str:
+    adj = "adj" if auto_adjust else "raw"
+    pp = "prepost" if prepost else "rth"
+    return f"{symbol}_{dt_to_datestr(d)}_{interval}_{adj}_{pp}"
 
 def choose_entry_price(rec: Dict[str, Any], mode: str, fill: str) -> Optional[float]:
     """
@@ -208,13 +210,13 @@ def load_intraday_yahoo(symbol: str, d: date, interval: str) -> pd.DataFrame:
     # Normalize index timezone to NY if possible
     if hasattr(df.index, "tz") and df.index.tz is not None:
         try:
-            df.index = df.index.tz_convert(NY_TZ)
+            df.index = df.index.tz_convert(NY)
         except Exception:
             pass
     else:
         # naive index -> assume NY
         if ZoneInfo is not None:
-            df.index = df.index.tz_localize(ZoneInfo(NY_TZ), nonexistent="shift_forward", ambiguous="NaT")
+            df.index = df.index.tz_localize(NY, nonexistent="shift_forward", ambiguous="NaT")
 
     # Keep only that day (NY date)
     df = df[df.index.date == d].copy()
@@ -323,8 +325,8 @@ def simulate_one(rec: Dict[str, Any], df: pd.DataFrame, signal_ts: datetime,
     high_max = after["High"].max()
     low_min = after["Low"].min()
 
-    mfe_pct = (float(high_max) - entry) / entry if entry > 0 else None
-    mae_pct = (float(low_min) - entry) / entry if entry > 0 else None
+    mfe_pct = abs((float(high_max) - entry)) / entry if entry > 0 else None
+    mae_pct = abs((float(low_min) - entry)) / entry if entry > 0 else None
 
     # Find hit times
     levels: Dict[str, Any] = {}
@@ -415,6 +417,7 @@ def simulate_one(rec: Dict[str, Any], df: pd.DataFrame, signal_ts: datetime,
 # -------------------------
 # Main
 # -------------------------
+_EMPTY = object()  # sentinel at module level
 
 def main():
     ap = argparse.ArgumentParser()
@@ -538,20 +541,22 @@ def main():
                     hist = pd.read_parquet(cache_path)
                     hist = normalize_yf_intraday(hist, sym)
                     # restore tz if needed is messy; parquet keeps it generally
-                    mem_cache[key] = hist
+                    mem_cache[key] = hist if hist is not None and not hist.empty else _EMPTY
                     continue
                 except Exception:
                     pass
 
             try:
                 hist = load_intraday_yahoo(sym, d, args.interval)
-                mem_cache[key] = hist
                 if hist is not None and not hist.empty:
+                    mem_cache[key] = hist
                     hist.to_parquet(cache_path)
                     with open(meta_path, "w", encoding="utf-8") as f:
                         json.dump({"symbol": sym, "date": dt_to_datestr(d), "interval": args.interval}, f)
+                else:
+                    mem_cache[key] = _EMPTY  # ← fetch succeeded but no data
             except Exception as e:
-                mem_cache[key] = None
+                mem_cache[key] = _EMPTY      # ← fetch failed entirely
                 failures.append({"date": dt_to_datestr(d), "symbol": sym, "error": str(e)})
 
         # Now replay each scan row
@@ -559,6 +564,8 @@ def main():
             rec = row.to_dict()
             sym = rec["_symbol"]
             hist = mem_cache.get((sym, d))
+            if hist is _EMPTY:
+                hist = None
             signal_dt: datetime = rec["_scan_dt"]
 
             r = simulate_one(

@@ -1,12 +1,20 @@
 param(
-    [string]$LogFile = "D:\TradingScripts\history\signals\signals_log_sample.csv",
+    [string]$LogFile = "D:\TradingScripts\history\signals\signals_log.csv",
     [string]$OutDir = "D:\TradingScripts\history\signals\replay_output",
-    [string]$StartDate = "2026-02-17",
-    [string]$EndDate = "2026-02-17",
+    [string]$StartDate = "",
+    [string]$EndDate = "",
     [string]$Interval = "1m",
     [string]$EntryMode = "market",
     [string]$Dedupe = "none"
 )
+
+#TODO If No Dates use the Current Dates
+if ([string]::IsNullOrWhiteSpace($StartDate) -or [string]::IsNullOrWhiteSpace($EndDate)) {
+    $today = Get-Date -Format "yyyy-MM-dd"
+    $StartDate = $EndDate = $today
+}
+
+
 
 Write-Host ""
 Write-Host "=== SIGNAL REPLAY RUNNER ===" -ForegroundColor Cyan
