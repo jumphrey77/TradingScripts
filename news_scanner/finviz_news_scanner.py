@@ -229,8 +229,13 @@ def parse_news_rows(html):
                 if "ticker" not in cls_str and len(a.get_text(strip=True)) > 15:
                     link_tag = a
                     break
+        url = ""
         if link_tag:
             headline = link_tag.get_text(strip=True)
+            url      = link_tag.get("href", "")
+            # Finviz uses relative URLs — prepend base
+            if url and url.startswith("/"):
+                url = "https://finviz.com" + url
 
         tickers = []
         for a in tr.find_all("a"):
@@ -254,6 +259,7 @@ def parse_news_rows(html):
                 "headline": headline,
                 "tickers":  tickers,
                 "source":   source,
+                "url":      url,
             })
 
     return rows
@@ -383,7 +389,7 @@ def append_alert_to_log(cfg, log_data, alert):
 def print_alert_row(a):
     """Single consistent format used in both NEW ALERTS and Recent Alerts."""
     pl      = priority_label(a["priority"])
-    tk      = f"{BOLD}{a['ticker']:<4}{RESET}"
+    tk      = f"{BOLD}{a['ticker']:<5}{RESET}"
     price   = f"${a.get('price', '?')}"
     # Fixed-width 22-char timestamp so columns always align regardless of format
     raw_ts  = a.get("news_time") or a.get("timestamp") or "?"
@@ -391,7 +397,7 @@ def print_alert_row(a):
     news_ts = f"{raw_ts:<22}"
     kws     = ", ".join(a.get("keywords", [])) or ""
     hl      = a["headline"][:48] + ("…" if len(a["headline"]) > 48 else "")
-    hl = f"{hl:<49}"  # ← pad to fixed width so keywords always start at same column
+    hl      = f"{hl:<49}"  # pad to fixed width so keywords always start at same column
     kw_str  = f"  {GREEN}{SYM_ARROW} {kws}{RESET}" if kws else ""
     print(f"  {DIM}{news_ts}{RESET}  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {hl}{kw_str}")
 
@@ -491,16 +497,28 @@ def main():
                         continue
 
                     seen_headlines.add(key)   # Mark as seen — will not re-fire
+
+                    # ── Linked tickers: other tickers on same article that
+                    # did not qualify on their own (no alert, context only)
+                    linked = [
+                        t for t in tickers
+                        if t != ticker
+                        and t not in watchlist
+                        and (prices.get(t) is None or prices.get(t) > threshold)
+                    ]
+
                     alert = {
-                        "timestamp": datetime.now().strftime("%H:%M:%S"),
-                        "news_time": news_time,
-                        "priority":  priority,
-                        "ticker":    ticker,
-                        "price":     f"{price:.2f}" if price is not None else "N/A",
-                        "keywords":  matched_kws,
-                        "headline":  headline,
-                        "source":    source,
-                        "age":       age,
+                        "timestamp":      datetime.now().strftime("%H:%M:%S"),
+                        "news_time":      news_time,
+                        "priority":       priority,
+                        "ticker":         ticker,
+                        "price":          f"{price:.2f}" if price is not None else "N/A",
+                        "keywords":       matched_kws,
+                        "headline":       headline,
+                        "source":         source,
+                        "age":            age,
+                        "linked_tickers": linked,
+                        "url":            row.get("url", ""),
                     }
                     rolling.append(alert)
                     append_alert_to_log(cfg, log_data, alert)
