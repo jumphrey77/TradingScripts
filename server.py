@@ -512,7 +512,7 @@ def scanner_worker():
             print("🔄 Running scheduled scan...")
 
             df = scan(return_df=True)
-            
+
             if df is None or len(df) == 0:
                 print("ℹ️ No rows returned from scan()")
                 time.sleep(REFRESH_SECONDS)
@@ -693,8 +693,21 @@ def api_sim_run_day_batch():
     # basic caching so we only download each ticker once
     cache = {}
     results = []
+    
+    scan_ts_values = set() #Duplicate TimeStamps
 
     for rec in recs:
+        
+        #Check Dup TS
+        ts = (rec.get("ScanTimestamp") or "").strip()
+        if ts:
+            scan_ts_values.add(ts)
+
+        if len(scan_ts_values) > 1:
+            return jsonify({"summary": {"count": 0, "ok": 0}, "results": [
+                {"status": "ERROR", "reason": "Multiple ScanTimestamp values in recs. Simulator expects one scan (one minute)."}
+            ]}), 400
+
         #symbol = str(rec.get("Ticker") or "").strip().upper()
         raw = rec.get("Ticker")
         if isinstance(raw, (list, tuple)):

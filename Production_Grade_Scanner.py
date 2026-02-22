@@ -209,7 +209,7 @@ def fetch_finviz_page(start, url):
         if len(t) > 20 or len(t.columns) != 11:
             continue
 
-        #Check Forst Row
+        #Check First Row
         if "ticker" in cols and "price" in cols and "change" in cols:
             if not isinstance(t.iloc[0]["Ticker"], str):
                 continue 

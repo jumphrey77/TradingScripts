@@ -1,10 +1,10 @@
 {
   "$schema": "./scanner.schema.json",
   "appsettings": {
-    "Debug": true,
-    "DebugAPI": true,
+    "Debug": false,
+    "DebugAPI": false,
     "DefaultTheme": "light",
-    "OutputSymbolAnalysis": true,
+    "OutputSymbolAnalysis": false,
     "UsePreMarketData": false
   },
   "finviz": {
@@ -35,14 +35,14 @@
     "enabled": true,
     "entry_fill_default": "mid",
     "max_recs_per_run": 55,
-    "min_score_default": 400,
+    "min_score_default": 100,
     "outcome_priority": [
       "STOP",
       "PCT",
       "T2",
       "T1"
     ],
-    "profit_pct_default": 0.15,
+    "profit_pct_default": 0.05,
     "session_end": "16:00",
     "session_start": "09:30",
     "use_stop_default": true

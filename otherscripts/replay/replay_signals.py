@@ -27,21 +27,29 @@ import pandas as pd
 # yfinance is what you're already using
 import yfinance as yf
 
-#TDDO Delete This
-#try:
-#    # Python 3.9+
-#    from zoneinfo import ZoneInfo
-#except Exception:
-#    ZoneInfo = None
-#NY_TZ = "America/New_York"
-
 NY = ZoneInfo("America/New_York")
-
 _ET = re.compile(r"\s+ET\s*$", re.IGNORECASE)
 
 # -------------------------
 # Helpers
 # -------------------------
+def time_of_day_bucket(ts) -> str:
+    if ts is None or pd.isna(ts):
+        return "NA"
+    try:
+        h = ts.hour
+        m = ts.minute
+        minutes = h * 60 + m
+        if minutes < 570:   return "pre-930"   # before 9:30
+        if minutes < 600:   return "930-1000"
+        if minutes < 660:   return "1000-1100"
+        if minutes < 720:   return "1100-1200"
+        if minutes < 780:   return "1200-1300"
+        if minutes < 840:   return "1300-1400"
+        if minutes < 900:   return "1400-1500"
+        return "1500-close"
+    except Exception:
+        return "NA"
 
 def normalize_yf_intraday(df: pd.DataFrame, symbol: str) -> pd.DataFrame:
     if df is None or df.empty:
@@ -222,7 +230,6 @@ def load_intraday_yahoo(symbol: str, d: date, interval: str) -> pd.DataFrame:
     df = df[df.index.date == d].copy()
     return df
 
-
 def find_bar_at_or_after(df: pd.DataFrame, t: datetime) -> Optional[pd.Timestamp]:
     if df is None or df.empty:
         return None
@@ -236,7 +243,6 @@ def find_bar_at_or_after(df: pd.DataFrame, t: datetime) -> Optional[pd.Timestamp
     if pos >= len(df.index):
         return None
     return df.index[pos]
-
 
 def simulate_one(rec: Dict[str, Any], df: pd.DataFrame, signal_ts: datetime,
                  entry_mode: str, entry_fill: str,
@@ -302,8 +308,7 @@ def simulate_one(rec: Dict[str, Any], df: pd.DataFrame, signal_ts: datetime,
                               "price": round(entry, 2) if entry is not None else None, 
                               "time": entry_time.isoformat()},
                     "levels": {},
-                    "stats": {"mfe_pct": round(mfe_pct, 4) if mfe_pct is not None else None, 
-                              "mae_pct": round(mfe_pct, 4) if mae_pct is not None else None},
+                    "stats": {"mfe_pct": None, "mae_pct": None},
                     "outcome": {"result": "NO_FILL"},
                     "timing": {}
                 }
@@ -317,16 +322,20 @@ def simulate_one(rec: Dict[str, Any], df: pd.DataFrame, signal_ts: datetime,
     t1 = safe_float(rec.get("Target1"))
     t2 = safe_float(rec.get("Target2"))
 
-
-    #print(after.columns.tolist())
-    #print(symbol, type(df.columns), df.columns[:10])
-
     entry = safe_float(entry_price)
     high_max = after["High"].max()
     low_min = after["Low"].min()
 
     mfe_pct = abs((float(high_max) - entry)) / entry if entry > 0 else None
     mae_pct = abs((float(low_min) - entry)) / entry if entry > 0 else None
+
+    # Price at signal time (first bar open after signal)
+    signal_bar_open = safe_float(df.loc[bar_ts].get("Open")) if bar_ts is not None else None
+
+    entry_distance_pct = round(abs((entry - signal_bar_open) / signal_bar_open), 4) if entry and signal_bar_open else None
+    t1_distance_pct = round((t1 - entry) / entry, 4) if t1 and entry else None
+    t2_distance_pct = round((t2 - entry) / entry, 4) if t2 and entry else None
+    stop_distance_pct = round(abs((stop - entry) / entry), 4) if stop and entry else None
 
     # Find hit times
     levels: Dict[str, Any] = {}
@@ -401,15 +410,24 @@ def simulate_one(rec: Dict[str, Any], df: pd.DataFrame, signal_ts: datetime,
         "symbol": symbol,
         "score": score,
         "signal_time": signal_ts.isoformat(),
-        "entry": {"mode": entry_mode, "fill_mode": entry_fill, "price": entry, "time": entry_time.isoformat()},
+        "entry": {"mode": entry_mode, "fill_mode": entry_fill, 
+                  "price": round(entry, 2) if entry is not None else None,  
+                  "time": entry_time.isoformat()},
         "levels": {k: (v if v["time"] is None else {**v, "time": v["time"].isoformat()}) for k, v in levels.items()},
-        "stats": {"mfe_pct": mfe_pct, "mae_pct": mae_pct},
+        "stats": {"mfe_pct": round(mfe_pct, 4) if mfe_pct is not None else None, 
+            "mae_pct": round(mae_pct, 4) if mae_pct is not None else None},  
         "outcome": {"result": outcome, "time": outcome_time.isoformat() if outcome_time is not None else None},
         "timing": timing,
         "meta": {
             "ScanTimestamp": rec.get("ScanTimestamp"),
             "SignalStartTimestamp": rec.get("SignalStartTimestamp"),
             "Pattern": rec.get("Pattern"),
+        },
+        "distances": {
+            "entry_distance_pct": entry_distance_pct,
+            "t1_distance_pct": t1_distance_pct,
+            "t2_distance_pct": t2_distance_pct,
+            "stop_distance_pct": stop_distance_pct,
         }
     }
 
@@ -594,6 +612,7 @@ def main():
             "mae_pct": (r.get("stats") or {}).get("mae_pct"),
             "entry_price": (r.get("entry") or {}).get("price"),
             "entry_time": (r.get("entry") or {}).get("time"),
+            "time_of_day": time_of_day_bucket(r.get("_scan_dt") or pd.Timestamp(r.get("signal_time")) if r.get("signal_time") else None),
         }
         # levels
         lv = r.get("levels") or {}
@@ -604,15 +623,35 @@ def main():
         tm = r.get("timing") or {}
         for k, v in tm.items():
             base[k] = v
+        #distances
+        dist = r.get("distances") or {}
+        base["entry_distance_pct"] = dist.get("entry_distance_pct")
+        base["t1_distance_pct"] = dist.get("t1_distance_pct")
+        base["t2_distance_pct"] = dist.get("t2_distance_pct")
+        base["stop_distance_pct"] = dist.get("stop_distance_pct")
+        
         flat_rows.append(base)
 
     out_results = os.path.join(outdir, "results.csv")
     out_fail = os.path.join(outdir, "yahoo_failures.csv")
 
     resdf = pd.DataFrame(flat_rows)
+    resdf = resdf[resdf["status"] == "OK"].copy()  # ← add this
     resdf.to_csv(out_results, index=False)
     if failures:
         pd.DataFrame(failures).to_csv(out_fail, index=False)
+
+    # Winners: hit any pct level, T1 or T2
+    winner_outcomes = {"T1_HIT", "T2_HIT"} | {f"PCT_{int(p*100)}_HIT" for p in pct_levels}
+    winners = resdf[resdf["outcome"].isin(winner_outcomes)].copy()
+    winners.to_csv(os.path.join(outdir, "winners.csv"), index=False)
+
+    # Losers: stopped out, or never hit any goal
+    loser_outcomes = {"STOP_HIT", "OPEN_AT_CLOSE", "NO_FILL"}
+    losers = resdf[resdf["outcome"].isin(loser_outcomes)].copy()
+    losers.to_csv(os.path.join(outdir, "losers.csv"), index=False)
+
+    print(f"Winners: {len(winners):,} | Losers: {len(losers):,}")
 
     # Summaries
     okdf = resdf[resdf["status"] == "OK"].copy()
@@ -659,6 +698,10 @@ def main():
     by_ticker = by_ticker.round(4)
     by_ticker.to_csv(os.path.join(outdir, "summary_by_ticker.csv"), index=False)
 
+    by_tod = okdf.groupby("time_of_day", dropna=False).apply(summary_group).reset_index()
+    by_tod = by_tod.round(4)
+    by_tod.to_csv(os.path.join(outdir, "summary_by_time_of_day.csv"), index=False)
+
     if "Pattern" in okdf.columns:
         by_pattern = okdf.groupby("Pattern", dropna=False).apply(summary_group).reset_index()
         by_pattern = by_pattern.round(4)
@@ -676,7 +719,8 @@ def main():
     print(f"Wrote: {out_results}")
     if failures:
         print(f"Wrote: {out_fail}")
-    print("Wrote summaries in:", outdir)
+    print("Wrote Summaries in:", outdir)
+    print("Wrote Winners in:", outdir)
 
 
 if __name__ == "__main__":

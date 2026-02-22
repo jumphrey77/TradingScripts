@@ -40,6 +40,21 @@ function parseTSV(tsvText) {
 
 function inferDateTimeFromScanTimestamp(ts) {
   if (!ts) return { date: null, time: null };
+  let s = String(ts).trim();
+
+  // remove trailing "ET" / "EST" / "EDT" etc
+  s = s.replace(/\s+(ET|EST|EDT|UTC|GMT)\s*$/i, "");
+
+  const m = s.match(/(20\d{2})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})/);
+  if (!m) return { date: null, time: null };
+
+  const hh = String(m[4]).padStart(2, "0");
+  return { date: `${m[1]}-${m[2]}-${m[3]}`, time: `${hh}:${m[5]}` };
+}
+
+  //TODO Remove This
+function inferDateTimeFromScanTimestamp_BAK(ts) {
+  if (!ts) return { date: null, time: null };
   const s = String(ts).trim();
 
   // Common forms:
@@ -139,8 +154,10 @@ export default function SimulatorPage() {
 
   const maxRecs = simDefaults?.max_recs_per_run ?? 50;
   const recsCapped = recs.slice(0, maxRecs);
-
-
+  const shownColumns = useMemo(() => {
+    const firstLine = (tsv || "").split(/\r?\n/)[0] || "";
+    return firstLine ? firstLine.split("\t").length : 0;
+  }, [tsv]);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,7 +214,7 @@ export default function SimulatorPage() {
   }, []);
 
   function csvRowsToRecsAndMeta(rows) {
-    if (!rows || rows.length < 2) return { recs: [], scanTimestamp: null };
+    if (!rows || rows.length < 2) return { recs: [], scanTimestamp: null, scanTimestampMismatch: false };
 
     const headers = rows[0].map(h => String(h || "").trim());
     const idx = (name) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
@@ -207,6 +224,8 @@ export default function SimulatorPage() {
     };
 
     let scanTimestamp = null;
+    let scanTimestampMismatch = false;
+
     const recs = [];
 
     for (let i = 1; i < rows.length; i++) {
@@ -216,36 +235,36 @@ export default function SimulatorPage() {
       const ticker = get(r, "Ticker");
       if (!String(ticker || "").trim()) continue;
 
-      // Capture scan timestamp from first non-empty row
-      const ts = get(r, "ScanTimestamp");
-      if (!scanTimestamp && ts) scanTimestamp = String(ts).trim();
+      const ts = String(get(r, "ScanTimestamp") || "").trim();
+      if (!scanTimestamp && ts) scanTimestamp = ts;
+      if (scanTimestamp && ts && ts !== scanTimestamp) scanTimestampMismatch = true;
 
       recs.push({
         Ticker: ticker,
-        Premarket: toNumMaybe(get(r, "Premarket")),
-        "Gap %": toNumMaybe(get(r, "Gap %")),
-        "Gap Dir": get(r, "Gap Dir"),
-        RelVol: toNumMaybe(get(r, "RelVol")),
-        "ATR %": toNumMaybe(get(r, "ATR %")),
+        Premarket: toNumMaybe(get(r, "Premarket")),   /*OMIT?*/
+        "Gap %": toNumMaybe(get(r, "Gap %")),         /*OMIT?*/
+        "Gap Dir": get(r, "Gap Dir"),                 /*OMIT?*/
+        RelVol: toNumMaybe(get(r, "RelVol")),         /*OMIT?*/
+        "ATR %": toNumMaybe(get(r, "ATR %")),         /*OMIT?*/
         Score: toNumMaybe(get(r, "Score")),
-        Chart: get(r, "Chart").slice(0, 6), /* JDU reduce length */
-        NEW: get(r, "NEW"),
-        Pattern: get(r, "Pattern").slice(0, 6), /* JDU reduce length */
+        Chart: get(r, "Chart"),                       /*OMIT?*/
+        NEW: get(r, "NEW"),                           /*OMIT?*/
+        Pattern: get(r, "Pattern"),                   /*OMIT?*/
         EntryLow: toNumMaybe(get(r, "EntryLow")),
         EntryHigh: toNumMaybe(get(r, "EntryHigh")),
         Stop: toNumMaybe(get(r, "Stop")),
         Target1: toNumMaybe(get(r, "Target1")),
         Target2: toNumMaybe(get(r, "Target2")),
-        RR_T1: toNumMaybe(get(r, "RR_T1")),
-        RR_T2: toNumMaybe(get(r, "RR_T2")),
-        MomentumScore: toNumMaybe(get(r, "MomentumScore")),
-        SignalId: get(r, "SignalId").slice(0, 6), /* JDU reduce length */
-        ScanTimestamp: ts
+        RR_T1: toNumMaybe(get(r, "RR_T1")),           /*OMIT?*/
+        RR_T2: toNumMaybe(get(r, "RR_T2")),           /*OMIT?*/
+        MomentumScore: toNumMaybe(get(r, "MomentumScore")), /*OMIT?*/
+        SignalId: get(r, "SignalId"), 
+        ScanTimestamp: ts,
+        SignalStartTimestamp: String(get(r, "SignalStartTimestamp") || "")
       });
     }
-
-    return { recs, scanTimestamp };
-  }
+    return { recs, scanTimestamp, scanTimestampMismatch };
+}
 
   function inferDateTimeFromFilename(name) {
     const s = String(name || "");
@@ -286,7 +305,12 @@ export default function SimulatorPage() {
 
       setCsvColumnCount(rows?.[0]?.length || null);
 
-      const { recs: recsFromCsv, scanTimestamp } = csvRowsToRecsAndMeta(rows);
+      const { recs: recsFromCsv, scanTimestamp, scanTimestampMismatch  } = csvRowsToRecsAndMeta(rows);
+
+      if (scanTimestampMismatch) {
+        setSummary({ error: "This CSV contains multiple ScanTimestamp values. The Simulator expects ONE scan (one minute). Export a single-minute scan file." });
+        return;
+      }
 
       // Convert to TSV (so you keep your existing parseTSV pipeline unchanged)
       // Include exactly the headers your parseTSV expects.
@@ -507,7 +531,7 @@ export default function SimulatorPage() {
                 padding: "4px 8px",
                 borderRadius: 6
               }}>
-                Showing simulator columns only (7 of {csvColumnCount} fields)
+                Showing simulator columns only ({shownColumns} of {csvColumnCount} fields)
               </div>
             )}
         <button
@@ -535,7 +559,7 @@ export default function SimulatorPage() {
           style={{ width: "100%", height: 180, padding: 10, fontFamily: "monospace" }}
         />
         <div style={{ marginTop: 6, opacity: 0.8, fontSize: 12 }}>
-          Parsed rows: <b>{recs.length}</b>  Showing simulator columns only (7 of 20 fields)
+          Parsed rows: <b>{recs.length}</b>
         </div>
       </div>
 

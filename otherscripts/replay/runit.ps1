@@ -1,8 +1,8 @@
 param(
     [string]$LogFile = "D:\TradingScripts\history\signals\signals_log.csv",
     [string]$OutDir = "D:\TradingScripts\history\signals\replay_output",
-    [string]$StartDate = "",
-    [string]$EndDate = "",
+    [string]$StartDate = "2026-02-18",
+    [string]$EndDate = "2026-02-18",
     [string]$Interval = "1m",
     [string]$EntryMode = "market",
     [string]$Dedupe = "none"
