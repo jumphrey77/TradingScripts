@@ -1,5 +1,5 @@
 {
-  "price_threshold_dollars": 10.00,
+  "price_threshold_dollars": 15.00,
   "scan_interval_seconds": 120,
   "news_max_age_hours": 4,
   "alert_sound_repeat": 1,
