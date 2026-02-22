@@ -398,7 +398,8 @@ def main():
 
             for alert in new_alerts_this_scan:
                 beep(cfg, alert["priority"])
-                time.sleep(0.3)
+                #time.sleep(0.3)
+                break
 
             print(f"\n{RED}{BOLD}  *** {len(new_alerts_this_scan)} NEW ALERT(S) THIS SCAN ***{RESET}\n")
             for alert in new_alerts_this_scan:
