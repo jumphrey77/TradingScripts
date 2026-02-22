@@ -99,15 +99,37 @@ def priority_label(priority):
         return f"{CYAN}[KEYWORD]{RESET}"
 
 # ── Age string → estimated ET datetime ────────────────────────────────────────
+# Finviz uses these formats depending on article age:
+#   Recent  : "12 min", "2 hours"
+#   Today   : "10:35AM" (wall clock, no date)
+#   Older   : "Feb-21"  (date only, no time — shown after midnight rollover)
+#   Ancient : "1 day"
+MONTH_MAP = {
+    "jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,
+    "jul":7,"aug":8,"sep":9,"oct":10,"nov":11,"dec":12
+}
+
 def age_to_et(age_str):
-    """
-    Convert Finviz age strings like '27 min', '1 hour', '2 hours', '10:35AM'
-    into an estimated wall-clock ET datetime string.
-    """
     now = datetime.now()
     age = age_str.strip().lower()
 
-    # Already a wall-clock time e.g. "10:35AM"
+    # "Feb-21" — date only, no time (older articles after midnight rollover)
+    match = re.match(r"([a-z]{3})-(\d{1,2})", age)
+    if match:
+        mon = MONTH_MAP.get(match.group(1))
+        day = int(match.group(2))
+        if mon:
+            # Use current year; if date is in the future roll back a year
+            year = now.year
+            try:
+                dt = datetime(year, mon, day)
+                if dt > now:
+                    dt = datetime(year - 1, mon, day)
+            except ValueError:
+                return age_str
+            return dt.strftime("%b %d  --:-- -- ET  ")
+
+    # "10:35AM" — wall clock time, same day
     match = re.match(r"(\d{1,2}):(\d{2})\s*(am|pm)?", age)
     if match:
         h, m = int(match.group(1)), int(match.group(2))
@@ -119,22 +141,26 @@ def age_to_et(age_str):
         dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
         return dt.strftime("%b %d  %I:%M %p ET")
 
+    # "27 min"
     match = re.match(r"(\d+)\s*min", age)
     if match:
         dt = now - timedelta(minutes=int(match.group(1)))
         return dt.strftime("%b %d  %I:%M %p ET")
 
+    # "2 hours"
     match = re.match(r"(\d+)\s*hour", age)
     if match:
         dt = now - timedelta(hours=int(match.group(1)))
         return dt.strftime("%b %d  %I:%M %p ET")
 
+    # "1 day"
     match = re.match(r"(\d+)\s*day", age)
     if match:
         dt = now - timedelta(days=int(match.group(1)))
-        return dt.strftime("%b %d  %I:%M %p ET")
+        return dt.strftime("%b %d  --:-- -- ET  ")
 
-    return age_str
+    # Unknown format — fixed width so columns don't shift
+    return f"{age_str:22s}"
 
 # ── Fetch Finviz news page ─────────────────────────────────────────────────────
 def fetch_news(cfg):
@@ -172,17 +198,18 @@ def parse_news_rows(html):
         tds = tr.find_all("td")
         if not tds:
             continue
+        #tr.find_all("td", class_="news_date-cell")
 
-        time_text = ""
+        time_text = "BROKE"
         for td in tds:
             txt = td.get_text(strip=True)
-            if txt and (":" in txt or "am" in txt.lower() or "pm" in txt.lower()
+            if txt and ("-" in txt or ":" in txt or "am" in txt.lower() or "pm" in txt.lower()
                         or "hour" in txt.lower() or "min" in txt.lower() or "day" in txt.lower()):
                 time_text = txt
                 break
 
         headline = ""
-        link_tag = tr.find("a", class_=lambda c: c and "tab-link" in str(c))
+        link_tag = tr.find("a", class_=lambda c: c and "nn-tab-link" in str(c))
         if not link_tag:
             link_tag = tr.find("a", class_=lambda c: c and "news-link" in str(c))
         if not link_tag:
@@ -203,12 +230,17 @@ def parse_news_rows(html):
                 if txt not in tickers and txt != headline:
                     tickers.append(txt)
 
-        source = ""
-        for td in reversed(tds):
-            txt = td.get_text(strip=True)
-            if txt and len(txt) > 2 and not txt.isupper():
-                source = txt
-                break
+        # 
+        badge_div = tr.find("div", class_="news-badges-container")
+        if badge_div:
+            spans = badge_div.find_all("span")
+            if spans:
+                source = spans[-1].get_text(strip=True)
+        #for td in reversed(tds):
+        #    txtS = td.get_text(strip=True)
+        #    if txtS and len(txtS) > 2 and not txtS.isupper():
+        #        source = "BROKE"
+        #        break
 
         if headline and tickers:
             rows.append({
@@ -293,22 +325,29 @@ def log_alert(cfg, alert):
             f"{alert['source']}\n"
         )
 
+# ── Shared single-line alert formatter ────────────────────────────────────────
+def print_alert_row(a):
+    """Single consistent format used in both NEW ALERTS and Recent Alerts."""
+    pl      = priority_label(a["priority"])
+    tk      = f"{BOLD}{a['ticker']:<4}{RESET}"
+    price   = f"${a.get('price', '?')}"
+    # Fixed-width 22-char timestamp so columns always align regardless of format
+    raw_ts  = a.get("news_time") or a.get("timestamp") or "?"
+    # Strip ANSI from length calc — pad the raw string, then colorize
+    news_ts = f"{raw_ts:<22}"
+    kws     = ", ".join(a.get("keywords", [])) or ""
+    hl      = a["headline"][:48] + ("…" if len(a["headline"]) > 48 else "")
+    kw_str  = f"  {GREEN}↳ {kws}{RESET}" if kws else ""
+    print(f"  {DIM}{news_ts}{RESET}  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {hl}{kw_str}")
+
 # ── Display rolling window — most recent ON TOP ────────────────────────────────
 def display_rolling(rolling, cfg):
     window = cfg.get("rolling_display_window", 20)
-    # Take last N from the deque and reverse so newest is first
     recent = list(rolling)[-window:][::-1]
     print(f"\n{BOLD}{WHITE}  Recent Alerts  (showing {len(recent)} of {len(rolling)} total):{RESET}")
     print(f"  {DIM}{'─'*LINES_TO_PRINT}{RESET}")
     for a in recent:
-        pl      = priority_label(a["priority"])
-        tk      = f"{BOLD}{a['ticker']:<4}{RESET}"
-        price   = f"${a.get('price','?')}"
-        news_ts = a.get("news_time", a["timestamp"])
-        kws     = ", ".join(a.get("keywords", [])) or ""
-        hl      = a["headline"][:50] + ("…" if len(a["headline"]) > 50 else "")
-        kw_str  = f"  {GREEN}↳ {kws}{RESET}" if kws else ""
-        print(f"  {DIM}{news_ts}{RESET}  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {hl}{kw_str}")
+        print_alert_row(a)
     print()
 
 # ── Main scan loop ─────────────────────────────────────────────────────────────
@@ -412,14 +451,11 @@ def main():
             new_alerts.sort(key=lambda a: PRIORITY_ORDER.get(a["priority"], 99))
             beep_scan(cfg, new_alerts)
 
-            print(f"\n{RED}{BOLD}  *** {len(new_alerts)} NEW ALERT(S) THIS SCAN ***{RESET}\n")
+            print(f"\n{RED}{BOLD}  *** {len(new_alerts)} NEW ALERT(S) THIS SCAN ***{RESET}")
+            print(f"  {DIM}{'─'*76}{RESET}")
             for alert in new_alerts:
-                pl    = priority_label(alert["priority"])
-                tk    = f"{BOLD}{alert['ticker']:<4}{RESET}"
-                price = f"${alert['price']}"
-                kws   = f"  {GREEN}[{', '.join(alert['keywords'])}]{RESET}" if alert["keywords"] else ""
-                print(f"  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {DIM}{alert['news_time']}{RESET}  {alert['headline'][:55]}{kws}")
-                print(f"{DIM}{alert['source']}{RESET}\n")
+                print_alert_row(alert)
+            print()
         else:
             print(f"  {DIM}No new alerts this scan.{RESET}\n")
 
