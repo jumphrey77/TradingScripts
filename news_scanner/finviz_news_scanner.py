@@ -30,18 +30,10 @@ import subprocess
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
 
-
-# Force UTF-8 output for CMD/PowerShell
-if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8")
-
 # ── Load config ────────────────────────────────────────────────────────────────
 def load_config():
     with open(CONFIG_PATH, "r") as f:
         return json.load(f)
-
-# ── Variables ──────────────────────────────────────────────────────────────────
-LINES_TO_PRINT = 89
 
 # ── Terminal helpers ───────────────────────────────────────────────────────────
 RESET   = "\033[0m"
@@ -54,6 +46,20 @@ BOLD    = "\033[1m"
 DIM     = "\033[2m"
 WHITE   = "\033[97m"
 
+LINES_TO_PRINT = 89   # Terminal line width — edit if your window is wider/narrower
+
+# ── Terminal Unicode capability detection ──────────────────────────────────────
+# CMD often can't render Unicode box/arrow chars even with chcp 65001.
+# Set SCANNER_UNICODE=0 in your environment to force ASCII mode.
+_UNICODE = os.environ.get("SCANNER_UNICODE", "1") != "0"
+
+# Symbols — Unicode when supported, ASCII fallback for CMD
+SYM_ARROW = "\u21b3" if _UNICODE else "->"   # ↳
+SYM_STAR  = "\u2605" if _UNICODE else "*"    # ★
+SYM_UP    = "\u2191" if _UNICODE else "^"    # ↑
+SYM_HEAVY = "\u2501" if _UNICODE else "="   # ━
+SYM_LIGHT = "\u2500" if _UNICODE else "-"   # ─
+
 def cls():
     subprocess.run("cls" if os.name == "nt" else "clear", shell=True, check=False)
 
@@ -62,13 +68,13 @@ def print_header(cfg):
     threshold = cfg["price_threshold_dollars"]
     interval  = cfg["scan_interval_seconds"]
     watches   = cfg.get("watchlist", [])
-    print(f"{BOLD}{CYAN}{'━'*LINES_TO_PRINT}{RESET}")
+    print(f"{BOLD}{CYAN}{LINES_TO_PRINT*SYM_HEAVY}{RESET}")
     print(f"{BOLD}{CYAN}  FINVIZ NEWS SCANNER{RESET}  {DIM}|  Price ≤ ${threshold:.2f}  |  Scan every {interval}s  |  {now}{RESET}")
-    print(f"{BOLD}{CYAN}{'━'*LINES_TO_PRINT}{RESET}")
+    print(f"{BOLD}{CYAN}{LINES_TO_PRINT*SYM_HEAVY}{RESET}")
     print(f"  {DIM}Keywords : {', '.join(cfg['keywords'][:6])}{'...' if len(cfg['keywords'])>6 else ''}{RESET}")
     if watches:
         print(f"  {DIM}Watchlist: {', '.join(watches)}{RESET}")
-    print(f"{CYAN}{'─'*LINES_TO_PRINT}{RESET}\n")
+    print(f"{CYAN}{LINES_TO_PRINT*SYM_LIGHT}{RESET}\n")
 
 # ── Beep: ONE beep per scan, pitched by highest priority ──────────────────────
 PRIORITY_ORDER = {"HIGH": 0, "WATCH": 1, "PRICE": 2, "KEYWORD": 3}
@@ -95,11 +101,11 @@ def beep_scan(cfg, alerts):
 
 def priority_label(priority):
     if priority == "HIGH":
-        return f"{RED}{BOLD}[HIGH ★ ]{RESET}"
+        return f"{RED}{BOLD}[HIGH {SYM_STAR} ]{RESET}"
     elif priority == "WATCH":
         return f"{MAGENTA}{BOLD}[WATCH  ]{RESET}"
     elif priority == "PRICE":
-        return f"{YELLOW}{BOLD}[PRICE ↑]{RESET}"
+        return f"{YELLOW}{BOLD}[PRICE {SYM_UP}]{RESET}"
     else:
         return f"{CYAN}[KEYWORD]{RESET}"
 
@@ -203,9 +209,8 @@ def parse_news_rows(html):
         tds = tr.find_all("td")
         if not tds:
             continue
-        #tr.find_all("td", class_="news_date-cell")
 
-        time_text = "BROKE"
+        time_text = ""
         for td in tds:
             txt = td.get_text(strip=True)
             if txt and ("-" in txt or ":" in txt or "am" in txt.lower() or "pm" in txt.lower()
@@ -235,17 +240,12 @@ def parse_news_rows(html):
                 if txt not in tickers and txt != headline:
                     tickers.append(txt)
 
-        # 
+        source = ""
         badge_div = tr.find("div", class_="news-badges-container")
         if badge_div:
             spans = badge_div.find_all("span")
             if spans:
                 source = spans[-1].get_text(strip=True)
-        #for td in reversed(tds):
-        #    txtS = td.get_text(strip=True)
-        #    if txtS and len(txtS) > 2 and not txtS.isupper():
-        #        source = "BROKE"
-        #        break
 
         if headline and tickers:
             rows.append({
@@ -343,7 +343,7 @@ def print_alert_row(a):
     kws     = ", ".join(a.get("keywords", [])) or ""
     hl      = a["headline"][:48] + ("…" if len(a["headline"]) > 48 else "")
     hl = f"{hl:<49}"  # ← pad to fixed width so keywords always start at same column
-    kw_str  = f"  {GREEN}↳ {kws}{RESET}" if kws else ""
+    kw_str  = f"  {GREEN}{SYM_ARROW} {kws}{RESET}" if kws else ""
     print(f"  {DIM}{news_ts}{RESET}  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {hl}{kw_str}")
 
 # ── Display rolling window — most recent ON TOP ────────────────────────────────
@@ -351,7 +351,7 @@ def display_rolling(rolling, cfg):
     window = cfg.get("rolling_display_window", 20)
     recent = list(rolling)[-window:][::-1]
     print(f"\n{BOLD}{WHITE}  Recent Alerts  (showing {len(recent)} of {len(rolling)} total):{RESET}")
-    print(f"  {DIM}{'─'*LINES_TO_PRINT}{RESET}")
+    print(f"  {DIM}{(LINES_TO_PRINT-6)*SYM_LIGHT}{RESET}")
     for a in recent:
         print_alert_row(a)
     print()
@@ -458,7 +458,7 @@ def main():
             beep_scan(cfg, new_alerts)
 
             print(f"\n{RED}{BOLD}  *** {len(new_alerts)} NEW ALERT(S) THIS SCAN ***{RESET}")
-            print(f"  {DIM}{'─'*76}{RESET}")
+            print(f"  {DIM}{(LINES_TO_PRINT-6)*SYM_LIGHT}{RESET}")
             for alert in new_alerts:
                 print_alert_row(alert)
             print()
@@ -473,7 +473,7 @@ def main():
         next_scan = (datetime.now() + timedelta(seconds=interval)).strftime("%I:%M %p")
         print(f"  {DIM}Next scan in {interval}s  @  {next_scan} ET  |  Edit config.json anytime{RESET}")
         print(f"  {DIM}Log: {os.path.join(SCRIPT_DIR, cfg['log_file'])}{RESET}")
-        print(f"  {CYAN}{'─'*LINES_TO_PRINT}{RESET}")
+        print(f"{CYAN}{LINES_TO_PRINT*SYM_LIGHT}{RESET}")
 
         time.sleep(interval)
 
