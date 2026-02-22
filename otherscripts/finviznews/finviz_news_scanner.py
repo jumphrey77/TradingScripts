@@ -35,15 +35,15 @@ def load_config():
         return json.load(f)
 
 # ── Terminal helpers ───────────────────────────────────────────────────────────
-RESET  = "\033[0m"
-RED    = "\033[91m"
-YELLOW = "\033[93m"
-CYAN   = "\033[96m"
-GREEN  = "\033[92m"
-MAGENTA= "\033[95m"
-BOLD   = "\033[1m"
-DIM    = "\033[2m"
-WHITE  = "\033[97m"
+RESET   = "\033[0m"
+RED     = "\033[91m"
+YELLOW  = "\033[93m"
+CYAN    = "\033[96m"
+GREEN   = "\033[92m"
+MAGENTA = "\033[95m"
+BOLD    = "\033[1m"
+DIM     = "\033[2m"
+WHITE   = "\033[97m"
 
 def cls():
     os.system("cls" if os.name == "nt" else "clear")
@@ -54,18 +54,17 @@ def print_header(cfg):
     interval  = cfg["scan_interval_seconds"]
     watches   = cfg.get("watchlist", [])
     print(f"{BOLD}{CYAN}{'━'*85}{RESET}")
-    print(f"{BOLD}{CYAN}  FINVIZ NEWS SCANNER{RESET}  {DIM}| Price ≤ ${threshold:.2f} | Scan every {interval}s | {now}{RESET}")
+    print(f"{BOLD}{CYAN}  FINVIZ NEWS SCANNER{RESET}  {DIM}|  Price ≤ ${threshold:.2f}  |  Scan every {interval}s  |  {now}{RESET}")
     print(f"{BOLD}{CYAN}{'━'*85}{RESET}")
     print(f"  {DIM}Keywords : {', '.join(cfg['keywords'][:6])}{'...' if len(cfg['keywords'])>6 else ''}{RESET}")
     if watches:
         print(f"  {DIM}Watchlist: {', '.join(watches)}{RESET}")
     print(f"{CYAN}{'─'*80}{RESET}\n")
 
-# ── Beep: ONE beep per scan, pitched by highest priority found ─────────────────
+# ── Beep: ONE beep per scan, pitched by highest priority ──────────────────────
 PRIORITY_ORDER = {"HIGH": 0, "WATCH": 1, "PRICE": 2, "KEYWORD": 3}
 
 def beep_scan(cfg, alerts):
-    """Fire a single beep sequence representing the highest priority in this scan."""
     if not alerts:
         return
     highest = min(alerts, key=lambda a: PRIORITY_ORDER.get(a["priority"], 99))["priority"]
@@ -99,13 +98,12 @@ def priority_label(priority):
 def age_to_et(age_str):
     """
     Convert Finviz age strings like '27 min', '1 hour', '2 hours', '10:35AM'
-    into an estimated wall-clock ET datetime (now minus the offset).
-    Returns a formatted string like '10:08 ET' or '09:35 ET'.
+    into an estimated wall-clock ET datetime string.
     """
     now = datetime.now()
     age = age_str.strip().lower()
 
-    # Already a wall-clock time e.g. "10:35AM" or "10:35am"
+    # Already a wall-clock time e.g. "10:35AM"
     match = re.match(r"(\d{1,2}):(\d{2})\s*(am|pm)?", age)
     if match:
         h, m = int(match.group(1)), int(match.group(2))
@@ -117,25 +115,21 @@ def age_to_et(age_str):
         dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
         return dt.strftime("%b %d  %I:%M %p ET")
 
-    # "X min" or "X mins"
     match = re.match(r"(\d+)\s*min", age)
     if match:
         dt = now - timedelta(minutes=int(match.group(1)))
         return dt.strftime("%b %d  %I:%M %p ET")
 
-    # "X hour" or "X hours"
     match = re.match(r"(\d+)\s*hour", age)
     if match:
         dt = now - timedelta(hours=int(match.group(1)))
         return dt.strftime("%b %d  %I:%M %p ET")
 
-    # "X day" or "X days"
     match = re.match(r"(\d+)\s*day", age)
     if match:
         dt = now - timedelta(days=int(match.group(1)))
         return dt.strftime("%b %d  %I:%M %p ET")
 
-    # Fallback: return as-is
     return age_str
 
 # ── Fetch Finviz news page ─────────────────────────────────────────────────────
@@ -154,7 +148,6 @@ def parse_news_rows(html):
     """
     Returns list of dicts:
       { 'age': str, 'headline': str, 'tickers': [str,...], 'source': str }
-    Finviz news page shows up to ~90 stories.
     Each row can have multiple ticker badges (up to 9+).
     """
     soup = BeautifulSoup(html, "html.parser")
@@ -168,7 +161,6 @@ def parse_news_rows(html):
             if t.find("a", class_=lambda c: c and "news" in str(c).lower()):
                 news_table = t
                 break
-
     if not news_table:
         return rows
 
@@ -177,7 +169,6 @@ def parse_news_rows(html):
         if not tds:
             continue
 
-        # Timestamp cell
         time_text = ""
         for td in tds:
             txt = td.get_text(strip=True)
@@ -186,7 +177,6 @@ def parse_news_rows(html):
                 time_text = txt
                 break
 
-        # Headline link
         headline = ""
         link_tag = tr.find("a", class_=lambda c: c and "tab-link" in str(c))
         if not link_tag:
@@ -200,7 +190,6 @@ def parse_news_rows(html):
         if link_tag:
             headline = link_tag.get_text(strip=True)
 
-        # All ticker badges on this row
         tickers = []
         for a in tr.find_all("a"):
             cls_val = " ".join(a.get("class", []))
@@ -210,7 +199,6 @@ def parse_news_rows(html):
                 if txt not in tickers and txt != headline:
                     tickers.append(txt)
 
-        # Source
         source = ""
         for td in reversed(tds):
             txt = td.get_text(strip=True)
@@ -301,20 +289,21 @@ def log_alert(cfg, alert):
             f"{alert['source']}\n"
         )
 
-# ── Display rolling window ─────────────────────────────────────────────────────
+# ── Display rolling window — most recent ON TOP ────────────────────────────────
 def display_rolling(rolling, cfg):
     window = cfg.get("rolling_display_window", 20)
-    recent = list(rolling)[-window:]
+    # Take last N from the deque and reverse so newest is first
+    recent = list(rolling)[-window:][::-1]
     print(f"\n{BOLD}{WHITE}  Recent Alerts  (showing {len(recent)} of {len(rolling)} total):{RESET}")
     print(f"  {DIM}{'─'*76}{RESET}")
-    for a in reversed(recent):
-        pl       = priority_label(a["priority"])
-        tk       = f"{BOLD}{a['ticker']:<4}{RESET}"
-        price    = f"${a.get('price','?')}"
-        news_ts  = a.get("news_time", a["timestamp"])
-        kws      = ", ".join(a.get("keywords", [])) or ""
-        hl       = a["headline"][:50] + ("…" if len(a["headline"]) > 50 else "")
-        kw_str   = f"  {GREEN}↳ {kws}{RESET}" if kws else ""
+    for a in recent:
+        pl      = priority_label(a["priority"])
+        tk      = f"{BOLD}{a['ticker']:<4}{RESET}"
+        price   = f"${a.get('price','?')}"
+        news_ts = a.get("news_time", a["timestamp"])
+        kws     = ", ".join(a.get("keywords", [])) or ""
+        hl      = a["headline"][:50] + ("…" if len(a["headline"]) > 50 else "")
+        kw_str  = f"  {GREEN}↳ {kws}{RESET}" if kws else ""
         print(f"  {DIM}{news_ts}{RESET}  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {hl}{kw_str}")
     print()
 
@@ -323,6 +312,7 @@ def main():
     print(f"{BOLD}{CYAN}Starting Finviz News Scanner...{RESET}")
     print(f"Config: {CONFIG_PATH}\n")
 
+    # Key = "TICKER::headline_text" — persists across scans to prevent duplicates
     seen_headlines = set()
     rolling        = deque(maxlen=500)
     scan_count     = 0
@@ -360,19 +350,21 @@ def main():
             tickers     = row["tickers"]
             source      = row["source"]
             age         = row["age"]
+            # Compute news time ONCE per row using the age at parse time
             news_time   = age_to_et(age)
             matched_kws = headline_has_keyword(headline, keywords)
 
             for ticker in tickers:
+                # ── Dedup key: ticker + raw headline text (not computed time)
+                # This persists across scans so the same story is never re-alerted
                 key = f"{ticker}::{headline}"
                 if key in seen_headlines:
                     continue
 
-                price            = prices.get(ticker)
-                under_threshold  = (price is not None and price <= threshold)
-                is_watched       = ticker in watchlist
+                price           = prices.get(ticker)
+                under_threshold = (price is not None and price <= threshold)
+                is_watched      = ticker in watchlist
 
-                # Priority determination
                 priority = None
                 if under_threshold and matched_kws:
                     priority = "HIGH"
@@ -384,7 +376,7 @@ def main():
                     priority = "KEYWORD"
 
                 if priority:
-                    seen_headlines.add(key)
+                    seen_headlines.add(key)   # Mark as seen — will not re-fire
                     alert = {
                         "timestamp": datetime.now().strftime("%H:%M:%S"),
                         "news_time": news_time,
@@ -411,8 +403,7 @@ def main():
                 tk    = f"{BOLD}{alert['ticker']:<4}{RESET}"
                 price = f"${alert['price']}"
                 kws   = f"  {GREEN}[{', '.join(alert['keywords'])}]{RESET}" if alert["keywords"] else ""
-                watch_tag = f"  {MAGENTA}[WATCHLIST]{RESET}" if alert["ticker"] in watchlist else ""
-                print(f"  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {DIM}{alert['news_time']}{RESET}  {alert['headline'][:55]}{kws}{watch_tag}")
+                print(f"  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {DIM}{alert['news_time']}{RESET}  {alert['headline'][:55]}{kws}")
                 print(f"            {DIM}{alert['source']}{RESET}\n")
         else:
             print(f"  {DIM}No new alerts this scan.{RESET}\n")
@@ -420,8 +411,10 @@ def main():
         if rolling:
             display_rolling(rolling, cfg)
 
-        interval = cfg["scan_interval_seconds"]
-        print(f"  {DIM}Next scan in {interval}s  |  Edit config.json anytime — changes apply next scan{RESET}")
+        # ── Footer with next scan time ────────────────────────────────────────
+        interval  = cfg["scan_interval_seconds"]
+        next_scan = (datetime.now() + timedelta(seconds=interval)).strftime("%I:%M %p")
+        print(f"  {DIM}Next scan in {interval}s  @  {next_scan} ET  |  Edit config.json anytime{RESET}")
         print(f"  {DIM}Log: {os.path.join(SCRIPT_DIR, cfg['log_file'])}{RESET}")
         print(f"{CYAN}{'─'*80}{RESET}")
 

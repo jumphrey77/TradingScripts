@@ -8,10 +8,13 @@
   "min_avg_volume": 500000,
   "min_relative_volume": 2.0,
   "max_float_million": 100,
+  "output_keyword": false,
+  "output_watch": false,
   "watchlist": [
     "WBD",
     "NFLX",
-    "PLTR"
+    "PLTR",
+    "PSKY"
   ],
   "keywords": [
     "partnership",
@@ -27,7 +30,8 @@
     "deal",
     "collaboration",
     "license agreement",
-    "strategic"
+    "strategic",
+    "raises it price target"
   ],
   "keyword_alert_mode": "both",
   "finviz_news_url": "https://finviz.com/news.ashx?v=3",
