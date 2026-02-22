@@ -4,6 +4,8 @@
 /config/backups/
 /history/
 /zz_old/
+/zips/
+
 
 /node_modules/
 /dist/
@@ -30,3 +32,4 @@ venv/
 # Logs / runtime
 # -----------------------------
 *.log
+otherscripts/finviznews/alerts_log.txt

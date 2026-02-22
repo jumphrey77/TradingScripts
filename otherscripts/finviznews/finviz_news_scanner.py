@@ -20,6 +20,8 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from collections import deque
+from io import StringIO
+import pandas as pd
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -47,9 +49,9 @@ def print_header(cfg):
     now = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
     threshold = cfg["price_threshold_dollars"]
     interval  = cfg["scan_interval_seconds"]
-    print(f"{BOLD}{CYAN}{'━'*80}{RESET}")
+    print(f"{BOLD}{CYAN}{'━'*85}{RESET}")
     print(f"{BOLD}{CYAN}  FINVIZ NEWS SCANNER{RESET}  {DIM}|  Price ≤ ${threshold:.2f}  |  Scan every {interval}s  |  {now}{RESET}")
-    print(f"{BOLD}{CYAN}{'━'*80}{RESET}")
+    print(f"{BOLD}{CYAN}{'━'*85}{RESET}")
     print(f"  {DIM}Keywords: {', '.join(cfg['keywords'][:6])}{'...' if len(cfg['keywords'])>6 else ''}{RESET}")
     print(f"{CYAN}{'─'*80}{RESET}\n")
 
@@ -187,44 +189,90 @@ def parse_news_rows(html):
 
     return rows
 
-# ── Fetch screener prices for a batch of tickers ───────────────────────────────
+# ── Screener constants ─────────────────────────────────────────────────────────
+# v=111 = basic screener view with Ticker, Price, Change, Volume columns
+SCREENER_VIEW = "111"
+SCREENER_COLS = "0,1,2,65"   # No, Ticker, Price, Change
+
+def _fetch_screener_page(url, ticker_str, start, headers):
+    """
+    Fetch one page of Finviz screener results (20 rows per page).
+    Uses pandas.read_html for reliable table parsing — same approach
+    as the proven multi-page scanner.
+    Returns a DataFrame with columns [Ticker, Price, ...] or None.
+    """
+    params = {
+        "v": SCREENER_VIEW,
+        "t": ticker_str,
+        "c": SCREENER_COLS,
+        "r": start,          # pagination offset (1, 21, 41, ...)
+    }
+    try:
+        resp = requests.get(url, headers=headers, params=params, timeout=20)
+        resp.raise_for_status()
+        tables = pd.read_html(StringIO(resp.text))
+    except Exception:
+        return None
+
+    for t in tables:
+        cols = [str(c).lower() for c in t.columns]
+
+        if len(t) == 0:
+            continue
+
+        # Must contain these columns
+        required = ["ticker", "price", "change", "volume"]
+        if not all(any(req in c for c in cols) for req in required):
+            continue
+
+        # Finviz screener result tables are exactly 11 columns, max 20 rows
+        if len(t) > 20 or len(t.columns) != 11:
+            continue
+
+        # Sanity-check first row: Ticker should be a string
+        if not isinstance(t.iloc[0]["Ticker"], str):
+            continue
+
+        return t
+
+    return None
+
+
 def fetch_ticker_prices(tickers, cfg):
     """
-    Uses Finviz screener to get current prices for a list of tickers.
+    Paginate through Finviz screener for the given ticker list.
+    Finviz returns 20 rows per page — we step through until no more results.
     Returns dict: { 'TICKER': float_price or None }
     """
     if not tickers:
         return {}
 
-    prices = {}
-    # Finviz screener accepts ticker list via 't' param
-    ticker_str = ",".join(tickers)
-    url = f"{cfg['finviz_screener_base_url']}?v=111&t={ticker_str}&c=0,1,2,65"
-    headers = {"User-Agent": cfg["user_agent"]}
+    prices    = {}
+    headers   = {"User-Agent": cfg["user_agent"]}
+    url       = cfg["finviz_screener_base_url"]
+    ticker_str = ",".join(tickers)   # pass full list; Finviz filters server-side
 
-    try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
+    start = 1
+    while True:
+        df = _fetch_screener_page(url, ticker_str, start, headers)
 
-        # Screener results table
-        table = soup.find("table", {"id": "screener-table"})
-        if not table:
-            table = soup.find("table", class_=lambda c: c and "screener" in str(c).lower())
+        if df is None or len(df) == 0:
+            break   # No more pages
 
-        if table:
-            for row in table.find_all("tr")[1:]:  # skip header
-                cells = row.find_all("td")
-                if len(cells) >= 3:
-                    ticker_cell = cells[1].get_text(strip=True)
-                    price_cell  = cells[2].get_text(strip=True) if len(cells) > 2 else ""
-                    try:
-                        prices[ticker_cell] = float(price_cell.replace(",", ""))
-                    except ValueError:
-                        prices[ticker_cell] = None
-    except Exception as e:
-        # If screener fails, return empty — not fatal
-        pass
+        for _, row in df.iterrows():
+            ticker = str(row.get("Ticker", "")).strip()
+            raw_price = row.get("Price", None)
+            if ticker:
+                try:
+                    prices[ticker] = float(str(raw_price).replace(",", ""))
+                except (ValueError, TypeError):
+                    prices[ticker] = None
+
+        if len(df) < 20:
+            break   # Last page had fewer than 20 rows — we're done
+
+        start += 20
+        time.sleep(0.5)   # Brief pause between pages to be polite
 
     return prices
 
@@ -261,7 +309,7 @@ def display_rolling(rolling, cfg):
         tk    = f"{BOLD}{a['ticker']:<4}{RESET}"
         price = f"${a.get('price', '?')}"
         kws   = ", ".join(a.get("keywords", [])) or ""
-        hl    = a['headline'][:55] + ("…" if len(a['headline']) > 55 else "")
+        hl    = a['headline'][:50] + ("…" if len(a['headline']) > 55 else "")
         kw_str = f"  {GREEN}↳ {kws}{RESET}" if kws else ""
         print(f"  {DIM}{ts}{RESET}  {pl}  {tk:6s}  {YELLOW}{price:>8}{RESET}  {hl}{kw_str}")
     print()
@@ -293,11 +341,12 @@ def main():
             continue
 
         rows = parse_news_rows(html)
-        print(f"  {DIM}Parsed {len(rows)} news rows.{RESET}\n")
-
-        # Collect all unique tickers from all rows to batch-price-check
         all_tickers = list({t for row in rows for t in row["tickers"]})
+        print(f"  {DIM}Parsed {len(rows)} news rows  |  {len(all_tickers)} unique tickers  |  Fetching prices...{RESET}")
+
         prices = fetch_ticker_prices(all_tickers, cfg)
+        resolved = sum(1 for v in prices.values() if v is not None)
+        print(f"  {DIM}Prices resolved: {resolved}/{len(all_tickers)}{RESET}\n")
 
         new_alerts_this_scan = []
 

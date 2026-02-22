@@ -2,7 +2,7 @@
   "price_threshold_dollars": 10.00,
   "scan_interval_seconds": 120,
   "news_max_age_hours": 4,
-  "alert_sound_repeat": 1,
+  "alert_sound_repeat": 0,
   "rolling_display_window": 20,
   "log_file": "alerts_log.txt",
   "min_avg_volume": 500000,
