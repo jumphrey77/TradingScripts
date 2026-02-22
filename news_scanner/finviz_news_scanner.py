@@ -30,6 +30,11 @@ import subprocess
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
 
+
+# Force UTF-8 output for CMD/PowerShell
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
+
 # ── Load config ────────────────────────────────────────────────────────────────
 def load_config():
     with open(CONFIG_PATH, "r") as f:
@@ -337,6 +342,7 @@ def print_alert_row(a):
     news_ts = f"{raw_ts:<22}"
     kws     = ", ".join(a.get("keywords", [])) or ""
     hl      = a["headline"][:48] + ("…" if len(a["headline"]) > 48 else "")
+    hl = f"{hl:<49}"  # ← pad to fixed width so keywords always start at same column
     kw_str  = f"  {GREEN}↳ {kws}{RESET}" if kws else ""
     print(f"  {DIM}{news_ts}{RESET}  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {hl}{kw_str}")
 

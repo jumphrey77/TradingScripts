@@ -6,7 +6,6 @@
 /zz_old/
 /zips/
 
-
 /node_modules/
 /dist/
 /build/
@@ -32,4 +31,11 @@ venv/
 # Logs / runtime
 # -----------------------------
 *.log
-otherscripts/finviznews/alerts_log.txt
+alerts_log.txt
+alerts_log.json
+cred.txt
+config/scanner_config.json
+
+
+config/*.json
+!config/*.schema.json

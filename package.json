@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "papaparse": "^5.5.3",
-    "yfinance": "^0.0.6"
-  }
-}

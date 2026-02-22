@@ -1,472 +1,565 @@
-"""
-finviz_scanner.py
------------------
-Scans Finviz news for tickers matching your price threshold and/or keywords.
-Alerts via terminal sound + print. Logs all alerts to file.
-Configure via config.json in the same directory.
-
-Alert Priority Levels:
-  [HIGH]    Ticker is under price threshold AND headline contains a keyword
-  [WATCH]   Ticker is in your watchlist (any price)
-  [PRICE]   Ticker is under price threshold (no keyword)
-  [KEYWORD] Keyword matched but ticker is above price threshold
-"""
-
+import sys
+import importlib
+import requests
+import pandas as pd
+import time
+import platform
 import json
 import os
-import sys
-import time
-import winsound
-import requests
-from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
-from collections import deque
+from pathlib import Path
+from datetime import datetime
+import pandas_market_calendars as mcal
 from io import StringIO
-import pandas as pd
-import re
-import subprocess
+import yfinance as yf
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import math
+from config import config
+from utils import safe_float, safe_int
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
+# ===========================
+# USER SETTINGS
+# ===========================
 
-# ── Load config ────────────────────────────────────────────────────────────────
-def load_config():
-    with open(CONFIG_PATH, "r") as f:
-        return json.load(f)
+REQUEST_DELAY = 1.2
+MAX_RESULTS = 400
+MAX_WORKERS = 1
+REFRESH_SECONDS = 60
 
-# ── Terminal helpers ───────────────────────────────────────────────────────────
-RESET   = "\033[0m"
-RED     = "\033[91m"
-YELLOW  = "\033[93m"
-CYAN    = "\033[96m"
-GREEN   = "\033[92m"
-MAGENTA = "\033[95m"
-BOLD    = "\033[1m"
-DIM     = "\033[2m"
-WHITE   = "\033[97m"
+# ===========================
+# FINVIZ CONFIG
+# ===========================
 
-LINES_TO_PRINT = 90   # Terminal line width — edit if your window is wider/narrower
+BASE_URL = "https://finviz.com/screener.ashx"
+SCREENER_PARAMS = {"o": "-change"}
 
-def cls():
-    subprocess.run("cls" if os.name == "nt" else "clear", shell=True, check=False)
-
-def print_header(cfg):
-    now       = datetime.now().strftime("%Y-%m-%d  %H:%M:%S ET")
-    threshold = cfg["price_threshold_dollars"]
-    interval  = cfg["scan_interval_seconds"]
-    watches   = cfg.get("watchlist", [])
-    print(f"{BOLD}{CYAN}{LINES_TO_PRINT*'━'}{RESET}")
-    print(f"{BOLD}{CYAN}  FINVIZ NEWS SCANNER{RESET}  {DIM}|  Price ≤ ${threshold:.2f}  |  Scan every {interval}s  |  {now}{RESET}")
-    print(f"{BOLD}{CYAN}{LINES_TO_PRINT*'━'}{RESET}")
-    print(f"  {DIM}Keywords : {', '.join(cfg['keywords'][:6])}{'...' if len(cfg['keywords'])>6 else ''}{RESET}")
-    if watches:
-        print(f"  {DIM}Watchlist: {', '.join(watches)}{RESET}")
-    print(f"{CYAN}{LINES_TO_PRINT*'─'}{RESET}\n")
-
-# ── Beep: ONE beep per scan, pitched by highest priority ──────────────────────
-PRIORITY_ORDER = {"HIGH": 0, "WATCH": 1, "PRICE": 2, "KEYWORD": 3}
-
-def beep_scan(cfg, alerts):
-    if not alerts:
-        return
-    highest = min(alerts, key=lambda a: PRIORITY_ORDER.get(a["priority"], 99))["priority"]
-    repeat  = cfg.get("alert_sound_repeat", 3)
-    if highest == "HIGH":
-        for _ in range(repeat):
-            winsound.Beep(1200, 200)
-            time.sleep(0.1)
-    elif highest == "WATCH":
-        winsound.Beep(950, 300)
-        time.sleep(0.12)
-        winsound.Beep(950, 300)
-    elif highest == "PRICE":
-        winsound.Beep(800, 300)
-        time.sleep(0.12)
-        winsound.Beep(800, 300)
-    else:
-        winsound.Beep(600, 450)
-
-def priority_label(priority):
-    if priority == "HIGH":
-        return f"{RED}{BOLD}[HIGH ★ ]{RESET}"
-    elif priority == "WATCH":
-        return f"{MAGENTA}{BOLD}[WATCH  ]{RESET}"
-    elif priority == "PRICE":
-        return f"{YELLOW}{BOLD}[PRICE ↑]{RESET}"
-    else:
-        return f"{CYAN}[KEYWORD]{RESET}"
-
-# ── Age string → estimated ET datetime ────────────────────────────────────────
-# Finviz uses these formats depending on article age:
-#   Recent  : "12 min", "2 hours"
-#   Today   : "10:35AM" (wall clock, no date)
-#   Older   : "Feb-21"  (date only, no time — shown after midnight rollover)
-#   Ancient : "1 day"
-MONTH_MAP = {
-    "jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,
-    "jul":7,"aug":8,"sep":9,"oct":10,"nov":11,"dec":12
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "text/html",
+    "Accept-Language": "en-US,en;q=0.9",
 }
 
-def age_to_et(age_str):
-    now = datetime.now()
-    age = age_str.strip().lower()
+_last_mtime = 0
 
-    # "Feb-21" — date only, no time (older articles after midnight rollover)
-    match = re.match(r"([a-z]{3})-(\d{1,2})", age)
-    if match:
-        mon = MONTH_MAP.get(match.group(1))
-        day = int(match.group(2))
-        if mon:
-            # Use current year; if date is in the future roll back a year
-            year = now.year
-            try:
-                dt = datetime(year, mon, day)
-                if dt > now:
-                    dt = datetime(year - 1, mon, day)
-            except ValueError:
-                return age_str
-            return dt.strftime("%b %d  --:-- -- ET  ")
+def load_finviz_config():
+    global _last_mtime, _cached_config
 
-    # "10:35AM" — wall clock time, same day
-    match = re.match(r"(\d{1,2}):(\d{2})\s*(am|pm)?", age)
-    if match:
-        h, m = int(match.group(1)), int(match.group(2))
-        meridiem = match.group(3)
-        if meridiem == "pm" and h != 12:
-            h += 12
-        elif meridiem == "am" and h == 12:
-            h = 0
-        dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
-        return dt.strftime("%b %d  %I:%M %p ET")
+    mtime = Path(config.CONFIG_FILE).stat().st_mtime
 
-    # "27 min"
-    match = re.match(r"(\d+)\s*min", age)
-    if match:
-        dt = now - timedelta(minutes=int(match.group(1)))
-        return dt.strftime("%b %d  %I:%M %p ET")
+    if mtime != _last_mtime:
+        if _last_mtime != 0:
+            print("🔁 Finviz Config Reloaded")
+        _last_mtime = mtime
+        with open(file=config.CONFIG_FILE, mode="r") as f:
+            _cached_config = json.load(f)
 
-    # "2 hours"
-    match = re.match(r"(\d+)\s*hour", age)
-    if match:
-        dt = now - timedelta(hours=int(match.group(1)))
-        return dt.strftime("%b %d  %I:%M %p ET")
+    return _cached_config
 
-    # "1 day"
-    match = re.match(r"(\d+)\s*day", age)
-    if match:
-        dt = now - timedelta(days=int(match.group(1)))
-        return dt.strftime("%b %d  --:-- -- ET  ")
+def finviz_url_from_config(cfg):
 
-    # Unknown format — fixed width so columns don't shift
-    return f"{age_str:22s}"
+    filters = []
 
-# ── Fetch Finviz news page ─────────────────────────────────────────────────────
-def fetch_news(cfg):
-    headers = {"User-Agent": cfg["user_agent"]}
+    # --- Price --- DONE
+    if cfg.get("price") :
+        # sh_price_u20
+        filters.append(f"sh_price_{cfg['price']}")
+
+    # --- Float --- DONE
+    if cfg.get("float"):
+        # sh_float_u5
+        filters.append(f"sh_float_{cfg['float']}")
+
+    # --- Avg Volume --- DONE
+    if cfg.get("avgvol"):
+        # sh_avgvol_o500
+        filters.append(f"sh_avgvol_{cfg['avgvol']}")
+
+    # --- Rel Volume --- DONE
+    if cfg.get("relvol"):
+        # sh_relvol_o2
+        filters.append(f"sh_relvol_{cfg['relvol']}")
+
+    # --- Currrent Volume ---  DONE
+    if cfg.get("curvol"):
+        filters.append(f"sh_curvol_{cfg['curvol']}")
+
+    # --- News Date --- DONE
+    if cfg.get("news"):
+        # news_date_today
+        filters.append(f"news_date_{cfg['news']}")
+
+    # --- Exchange ---
+    if cfg.get("exchange"):
+        filters.append("sh_exch_" + ",".join(cfg["exchange"]))
+
+    # --- Market Cap ---
+    if cfg.get("market_cap"):
+        filters.append(f"cap_{cfg['market_cap']}")
+
+    # --- Gap ---
+    if cfg.get("gap_min"):
+        filters.append(f"ta_gap_o{cfg['gap_min']}")
+
+    # --- Change ---  DONE
+    if cfg.get("change"):
+        # &ta_change_u5
+        filters.append(f"ta_change_{cfg['change']}")
+
+    joinedFilters =  ",".join(filters)
+
+    return (f"{BASE_URL}?v=111&f={joinedFilters}")
+
+# ===========================
+# HELPERS
+# ===========================
+#region Region-Helpers
+def debug(msg):
+    if config.DEBUG:
+        print(msg)
+
+def output_symbol_analysis(msg):
+    if config.OUTPUT_SYMBOL_ANALYSIS:
+        print(msg)
+
+# DEPENDENCY CHECKS
+def check_module(name, pip_name=None):
     try:
-        resp = requests.get(cfg["finviz_news_url"], headers=headers, timeout=15)
-        resp.raise_for_status()
-        return resp.text
-    except Exception as e:
-        print(f"{RED}  [ERROR] Could not fetch news: {e}{RESET}")
-        return None
+        importlib.import_module(name)
+        return True
+    except ImportError:
+        print(f"\n❌ Missing module: {name}")
+        if pip_name:
+            print(f"Install with: pip install {pip_name}")
+        else:
+            print(f"Install with: pip install {name}")
+        return False
 
-# ── Parse news rows ────────────────────────────────────────────────────────────
-def parse_news_rows(html):
+# DEPENDENCY CHECKS
+def check_modules(check_module):
+    print("\nChecking Required Modules...\n")
+
+    html_ok = True
+    html_ok &= check_module("lxml")
+    html_ok &= check_module("bs4", "beautifulsoup4")
+    #html_ok &= check_module("html5lib")
+    html_ok &= check_module("pandas_market_calendars")
+    
+    if not html_ok:
+        print("\nOne or more required HTML modules missing.")
+        print("Install them then re-run this script.\n")
+        #sys.exit(1)
+
+def is_market_open(today=None):
     """
-    Returns list of dicts:
-      { 'age': str, 'headline': str, 'tickers': [str,...], 'source': str }
-    Each row can have multiple ticker badges (up to 9+).
+    Returns True if the market is open today, False otherwise.
+    Uses NYSE calendar from pandas_market_calendars.
     """
-    soup = BeautifulSoup(html, "html.parser")
-    rows = []
+    nyse = mcal.get_calendar("NYSE")
+    
+    if today is None:
+        today = datetime.today()
 
-    news_table = soup.find("table", {"id": "news-table"})
-    if not news_table:
-        news_table = soup.find("table", class_=lambda c: c and "news" in c.lower())
-    if not news_table:
-        for t in soup.find_all("table"):
-            if t.find("a", class_=lambda c: c and "news" in str(c).lower()):
-                news_table = t
-                break
-    if not news_table:
-        return rows
+    schedule = nyse.schedule(start_date=today, end_date=today)
+    #Return Empty if closed
+    #Empty True  = Closed
+    #Empty False = Opon
 
-    for tr in news_table.find_all("tr"):
-        tds = tr.find_all("td")
-        if not tds:
-            continue
 
-        time_text = ""
-        for td in tds:
-            txt = td.get_text(strip=True)
-            if txt and ("-" in txt or ":" in txt or "am" in txt.lower() or "pm" in txt.lower()
-                        or "hour" in txt.lower() or "min" in txt.lower() or "day" in txt.lower()):
-                time_text = txt
-                break
+    return not schedule.empty
 
-        headline = ""
-        link_tag = tr.find("a", class_=lambda c: c and "nn-tab-link" in str(c))
-        if not link_tag:
-            link_tag = tr.find("a", class_=lambda c: c and "news-link" in str(c))
-        if not link_tag:
-            for a in tr.find_all("a"):
-                cls_str = " ".join(a.get("class", []))
-                if "ticker" not in cls_str and len(a.get_text(strip=True)) > 15:
-                    link_tag = a
-                    break
-        if link_tag:
-            headline = link_tag.get_text(strip=True)
+def beep():
+    if platform.system() == "Windows":
+        import winsound
+        winsound.Beep(1200, 500)
+    else:
+        print("\a")
+#endregion
 
-        tickers = []
-        for a in tr.find_all("a"):
-            cls_val = " ".join(a.get("class", []))
-            txt = a.get_text(strip=True)
-            if (txt and txt.isupper() and 1 <= len(txt) <= 5
-                    and ("ticker" in cls_val.lower() or "tab-link" not in cls_val.lower())):
-                if txt not in tickers and txt != headline:
-                    tickers.append(txt)
+# ===========================
+# FINVIZ FETCH
+# ===========================
 
-        source = ""
-        badge_div = tr.find("div", class_="news-badges-container")
-        if badge_div:
-            spans = badge_div.find_all("span")
-            if spans:
-                source = spans[-1].get_text(strip=True)
+def fetch_finviz_page(start, url):
 
-        if headline and tickers:
-            rows.append({
-                "age":      time_text,
-                "headline": headline,
-                "tickers":  tickers,
-                "source":   source,
-            })
+    #Last Minute Page Paramaters
+    params = SCREENER_PARAMS.copy()
+    params["r"] = start
 
-    return rows
+    r = requests.get(url=url, headers=HEADERS, params=params, timeout=20)
 
-# ── Screener price fetch (paginated, pandas-based) ─────────────────────────────
-SCREENER_VIEW = "111"
-SCREENER_COLS = "0,1,2,65"
+    r.raise_for_status()
 
-def _fetch_screener_page(url, ticker_str, start, headers):
-    params = {"v": SCREENER_VIEW, "t": ticker_str, "c": SCREENER_COLS, "r": start}
-    try:
-        resp   = requests.get(url, headers=headers, params=params, timeout=20)
-        resp.raise_for_status()
-        tables = pd.read_html(StringIO(resp.text))
-    except Exception:
-        return None
+    #debug(f"Querying Finviz : {r.url}")
+
+    tables = pd.read_html(StringIO(r.text))
 
     for t in tables:
+
         cols = [str(c).lower() for c in t.columns]
+        
+        # No Rows
         if len(t) == 0:
             continue
+
+        # Must contain these columns
         required = ["ticker", "price", "change", "volume"]
         if not all(any(req in c for c in cols) for req in required):
             continue
+
+        # Must be reasonably sized - 11 Columns Normal
         if len(t) > 20 or len(t.columns) != 11:
             continue
-        if not isinstance(t.iloc[0]["Ticker"], str):
-            continue
-        return t
+
+        #Check Forst Row
+        if "ticker" in cols and "price" in cols and "change" in cols:
+            if not isinstance(t.iloc[0]["Ticker"], str):
+                continue 
+
+        if "ticker" in cols and "price" in cols and "change" in cols:
+            return t
+
     return None
 
-def fetch_ticker_prices(tickers, cfg):
-    if not tickers:
-        return {}
-    prices     = {}
-    headers    = {"User-Agent": cfg["user_agent"]}
-    url        = cfg["finviz_screener_base_url"]
-    ticker_str = ",".join(tickers)
-    start = 1
-    while True:
-        df = _fetch_screener_page(url, ticker_str, start, headers)
-        if df is None or len(df) == 0:
-            break
-        for _, row in df.iterrows():
-            ticker = str(row.get("Ticker", "")).strip()
-            raw    = row.get("Price", None)
-            if ticker:
-                try:
-                    prices[ticker] = float(str(raw).replace(",", ""))
-                except (ValueError, TypeError):
-                    prices[ticker] = None
-        if len(df) < 20:
-            break
-        start += 20
-        time.sleep(0.5)
-    return prices
+# ===========================
+# YAHOO METRICS (FAST)
+# ===========================
 
-# ── Keyword matching ───────────────────────────────────────────────────────────
-def headline_has_keyword(headline, keywords):
-    hl = headline.lower()
-    return [kw for kw in keywords if kw.lower() in hl]
+def yahoo_metrics(symbol, use_premarket):
+    """
+    Returns metrics for a single ticker:
+    - pre_price: last price used (pre-market or last close)
+    - gap: percentage gap vs previous trading day
+    - relvol: relative volume (today/avg20)
+    - atr_pct: ATR as percentage of previous close
 
-# ── Logging ────────────────────────────────────────────────────────────────────
-def log_alert(cfg, alert):
-    log_path = os.path.join(SCRIPT_DIR, cfg["log_file"])
-    with open(log_path, "a", encoding="utf-8") as f:
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        f.write(
-            f"{ts} | {alert['priority']:8s} | "
-            f"{alert['ticker']:6s} | "
-            f"${alert.get('price','?'):>7} | "
-            f"News: {alert.get('news_time','?'):22s} | "
-            f"KW: {', '.join(alert.get('keywords',[])) or 'none':30s} | "
-            f"{alert['headline'][:80]} | "
-            f"{alert['source']}\n"
-        )
+    USE_PREMARKET 
+    determines whether to use live intraday bars or last full trading day
+    """
 
-# ── Shared single-line alert formatter ────────────────────────────────────────
-def print_alert_row(a):
-    """Single consistent format used in both NEW ALERTS and Recent Alerts."""
-    pl      = priority_label(a["priority"])
-    tk      = f"{BOLD}{a['ticker']:<4}{RESET}"
-    price   = f"${a.get('price', '?')}"
-    # Fixed-width 22-char timestamp so columns always align regardless of format
-    raw_ts  = a.get("news_time") or a.get("timestamp") or "?"
-    # Strip ANSI from length calc — pad the raw string, then colorize
-    news_ts = f"{raw_ts:<22}"
-    kws     = ", ".join(a.get("keywords", [])) or ""
-    hl      = a["headline"][:48] + ("…" if len(a["headline"]) > 48 else "")
-    kw_str  = f"  {GREEN}↳ {kws}{RESET}" if kws else ""
-    print(f"  {DIM}{news_ts}{RESET}  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {hl}{kw_str}")
+    try:
+        # --- Daily bars (30 days) ---
+        daily = yf.download(symbol, period="30d", interval="1d", 
+                            progress=False, threads=False)
+        daily = daily.dropna()
+        if daily.empty or len(daily) < 2:
+            debug(f"{symbol}: Not enough daily data")
+            return None
 
-# ── Display rolling window — most recent ON TOP ────────────────────────────────
-def display_rolling(rolling, cfg):
-    window = cfg.get("rolling_display_window", 20)
-    recent = list(rolling)[-window:][::-1]
-    print(f"\n{BOLD}{WHITE}  Recent Alerts  (showing {len(recent)} of {len(rolling)} total):{RESET}")
-    print(f"  {DIM}{(LINES_TO_PRINT+9)*'─'}{RESET}")
-    for a in recent:
-        print_alert_row(a)
-    print()
+        # --- Force scalar MultiIndex-safe columns ---
+        daily.columns = [c[0] if isinstance(c, tuple) else c for c in daily.columns]
 
-# ── Main scan loop ─────────────────────────────────────────────────────────────
-def main():
-    print(f"{BOLD}{CYAN}Starting Finviz News Scanner...{RESET}")
-    print(f"Config: {CONFIG_PATH}\n")
+        # --- Last trading day fallback ---
+        last_day = daily.iloc[-1]
+        prev_day = daily.iloc[-2]
 
-    # Key = "TICKER::headline_text" — persists across scans to prevent duplicates
-    seen_headlines = set()
-    rolling        = deque(maxlen=500)
-    scan_count     = 0
+        last_close = safe_float(last_day['Close'])
+        last_vol = safe_float(last_day['Volume'])
+        prev_close = safe_float(prev_day['Close'])
 
-    while True:
-        cfg       = load_config()
-        threshold = cfg["price_threshold_dollars"]
-        keywords  = cfg["keywords"]
-        mode      = cfg.get("keyword_alert_mode", "both")
-        watchlist = set(t.upper() for t in cfg.get("watchlist", []))
+        # If any are missing, bail safely
+        if last_close is None or last_vol is None or prev_close is None or prev_close <= 0:
+            debug(f"{symbol}: missing close/volume data (last_close={last_close}, prev_close={prev_close}, last_vol={last_vol})")
+            return None
 
-        cls()
-        print_header(cfg)
+        # --- Average volume (20-day) ---
+        avg_vol_series = daily['Volume'].tail(20)
+        avg_vol = safe_float(avg_vol_series.mean()) if not avg_vol_series.empty else None
 
-        scan_count += 1
-        print(f"  {DIM}Scan #{scan_count}  |  Fetching news...{RESET}")
+        # --- ATR (14-day) ---
+        h = daily['High']
+        l = daily['Low']
+        c = daily['Close'].shift(1)
 
-        html = fetch_news(cfg)
-        if not html:
-            time.sleep(cfg["scan_interval_seconds"])
-            continue
+        tr = pd.concat([
+            h - l,
+            (h - c).abs(),
+            (l - c).abs()
+        ], axis=1).max(axis=1)
 
-        rows        = parse_news_rows(html)
-        all_tickers = list({t for row in rows for t in row["tickers"]})
-        print(f"  {DIM}Parsed {len(rows)} rows  |  {len(all_tickers)} unique tickers  |  Fetching prices...{RESET}")
+        atr_val = tr.rolling(14).mean().iloc[-1]
+        atr = safe_float(atr_val) if pd.notna(atr_val) else None
+        atr_pct = round((atr / prev_close) * 100, 2) if atr is not None and prev_close > 0 else None
 
-        prices   = fetch_ticker_prices(all_tickers, cfg)
-        resolved = sum(1 for v in prices.values() if v is not None)
-        print(f"  {DIM}Prices resolved: {resolved}/{len(all_tickers)}{RESET}\n")
+        # --- Use pre-market intraday if flag is set ---
+        #TODO Use config.USEPREMATETDATA?
+        if use_premarket:
+             # pre-market intraday logic (prepost=True)
+            intraday = yf.download(symbol, period="7d", interval="5m", prepost=True,
+                                   progress=False, threads=False)
+            intraday = intraday.dropna()
+            if not intraday.empty:
+                intraday.columns = [c[0] if isinstance(c, tuple) else c for c in intraday.columns]
+                latest_idx = intraday.index.max()
+                pre_val = intraday["Close"].loc[latest_idx]
+                day_vol_val = intraday["Volume"].sum()
 
-        new_alerts = []
-
-        # Finviz returns rows newest-first — process in reverse (oldest first)
-        # so the deque appends oldest→newest, and the rolling display
-        # slice+reverse shows newest at the top correctly
-        for row in reversed(rows):
-            headline    = row["headline"]
-            tickers     = row["tickers"]
-            source      = row["source"]
-            age         = row["age"]
-            # Compute news time ONCE per row using the age at parse time
-            news_time   = age_to_et(age)
-            matched_kws = headline_has_keyword(headline, keywords)
-
-            for ticker in tickers:
-                # ── Dedup key: ticker + raw headline text (not computed time)
-                # This persists across scans so the same story is never re-alerted
-                key = f"{ticker}::{headline}"
-                if key in seen_headlines:
-                    continue
-
-                price           = prices.get(ticker)
-                under_threshold = (price is not None and price <= threshold)
-                is_watched      = ticker in watchlist
-
-                priority = None
-                if under_threshold and matched_kws:
-                    priority = "HIGH"
-                elif is_watched:
-                    priority = "WATCH"
-                elif under_threshold and mode in ("both", "price"):
-                    priority = "PRICE"
-                elif matched_kws and mode in ("both", "keyword"):
-                    priority = "KEYWORD"
-
-                if priority:
-                    # ── Output filter: suppress high-priced KEYWORD/WATCH if configured
-                    if priority == "KEYWORD" and not cfg.get("output_keyword", True):
-                        seen_headlines.add(key)
-                        continue
-                    if priority == "WATCH" and not cfg.get("output_watch", True):
-                        seen_headlines.add(key)
-                        continue
-
-                    seen_headlines.add(key)   # Mark as seen — will not re-fire
-                    alert = {
-                        "timestamp": datetime.now().strftime("%H:%M:%S"),
-                        "news_time": news_time,
-                        "priority":  priority,
-                        "ticker":    ticker,
-                        "price":     f"{price:.2f}" if price is not None else "N/A",
-                        "keywords":  matched_kws,
-                        "headline":  headline,
-                        "source":    source,
-                        "age":       age,
-                    }
-                    rolling.append(alert)
-                    log_alert(cfg, alert)
-                    new_alerts.append(alert)
-
-        # ── Fire ONE beep for the whole scan ──────────────────────────────────
-        if new_alerts:
-            new_alerts.sort(key=lambda a: PRIORITY_ORDER.get(a["priority"], 99))
-            beep_scan(cfg, new_alerts)
-
-            print(f"\n{RED}{BOLD}  *** {len(new_alerts)} NEW ALERT(S) THIS SCAN ***{RESET}")
-            print(f"  {DIM}{(LINES_TO_PRINT+9)*'─'}{RESET}")
-            for alert in new_alerts:
-                print_alert_row(alert)
-            print()
+                pre_price = safe_float(pre_val) if pd.notna(pre_val) else last_close
+                day_vol = safe_float(day_vol_val) if pd.notna(day_vol_val) else last_vol
+            else:
+                pre_price = last_close
+                day_vol = last_vol
         else:
-            print(f"  {DIM}No new alerts this scan.{RESET}\n")
+            pre_price = last_close
+            day_vol = last_vol
 
-        if rolling:
-            display_rolling(rolling, cfg)
+        # --- Gap % ---
+        gap = round((pre_price - prev_close) / prev_close * 100, 2) if prev_close > 0 else None
 
-        # ── Footer with next scan time ────────────────────────────────────────
-        interval  = cfg["scan_interval_seconds"]
-        next_scan = (datetime.now() + timedelta(seconds=interval)).strftime("%I:%M %p")
-        print(f"  {DIM}Next scan in {interval}s  @  {next_scan} ET  |  Edit config.json anytime{RESET}")
-        print(f"  {DIM}Log: {os.path.join(SCRIPT_DIR, cfg['log_file'])}{RESET}")
-        print(f"{CYAN}{LINES_TO_PRINT*'─'}{RESET}")
+        # --- Relative Volume ---
+        relvol = round(day_vol / avg_vol, 2) if avg_vol and day_vol and avg_vol > 0 else None
 
-        time.sleep(interval)
+        #output_symbol_analysis(f"{symbol}: pre_price={pre_price} last_close={last_close} prev_close={prev_close} "
+        #        f"gap={gap} relvol={relvol} atr%={atr_pct} day_vol={day_vol} avg_vol={avg_vol}")
+
+        return {
+            "pre": pre_price,
+            "gap": gap,
+            "relvol": relvol,
+            "atr_pct": atr_pct
+        }
+
+    except Exception as e:
+        import traceback
+        debug(f"Yahoo error {symbol}: {e}")
+        traceback.print_exc()
+        return None
+    
+# ===========================
+# MAIN
+# ===========================
+
+def scan(return_df=False):
+
+    start = 1
+    pages = []
+ 
+    today = datetime.today()
+
+    # GET FINVIZ CONFIG
+    cfg = load_finviz_config()
+
+    fv = cfg.get("finviz", {})
+    sc = cfg.get("scanner", {})
+    app = cfg.get("appsettings", {})
+
+    # APPLICATION SETTINGS
+    config.DEBUG = app.get("Debug", True)
+    config.DEBUG_API = app.get("DebugAPI", False)
+    config.USE_PREMARKET = app.get("UsePreMarketData", True)
+    config.OUTPUT_SYMBOL_ANALYSIS = app.get("OutputSymbolAnalysis", False)
+    
+    # SCAN SETTINGS
+    SC_MIN_PRICE = sc.get("price_min", 1)
+    SC_MAX_PRICE = sc.get("price_max", 20)
+
+    SC_GAP = sc.get("gap", 2)
+    SC_RELVOL = sc.get("relvol", 1.5)
+    SC_ATR = sc.get("atr", 2)
+    SC_MIN_SCORE = sc.get("score_min", 200)
+
+    url = finviz_url_from_config(fv)
+
+    debug(f"  Built URL : {url}")
+
+    # CHECK IF MARKETS AARE OPEN
+    if not is_market_open(today):
+        # Market CLOSED (weekend/holiday) → force EOD fallback
+        use_premarket_flag = False
+        debug("Market closed today → using last full trading day")
+        debug(f"USE_PREMARKET set to {config.USE_PREMARKET}")
+    else:
+        # Market open → use whatever flag the user set
+        use_premarket_flag = config.USE_PREMARKET
+
+    # url = 'https://finviz.com/screener.ashx
+    #   ?v=111
+    #   &f=sh_float_u50,sh_relvol_o2,sh_curvol_o500,news_date_prevdays7,ta_change_u20'
+    
+    # FETCH FIN VIZ DATA
+    while True:
+
+        debug(f"\nFetching Finviz r={start}")
+
+        tbl = fetch_finviz_page(start=start, url=url)
+
+        if tbl is None:
+            break
+
+        pages.append(tbl)
+
+        start += len(tbl)
+
+        if start > MAX_RESULTS:
+            break
+
+        time.sleep(REQUEST_DELAY)
+
+    debug(f"\nDone Fetching Finviz Pages")
+    debug(f"   URL: {url}")
+
+    if not pages:
+        debug("No pages fetched — skipping scan")
+        return pd.DataFrame() if return_df else None
+
+    #todo crashes
+    finviz_df_all = pd.concat(pages)
+
+    # Filter Out Unwanted Sectors
+    ignoresectors = fv.get("ignoresectors", [])  # default to empty list
+
+    print(f"IGNORE SECTORS CONFIG: {ignoresectors}")
+    debug(f"TABLE COUNT BEFORE {len(finviz_df_all) if finviz_df_all is not None else 0}")
+
+    finviz_df = finviz_df_all
+
+    if finviz_df_all is not None and ignoresectors:
+        ignoresectors_set = {s.strip().lower() for s in ignoresectors if s}
+
+        # Column 3 is Sector
+        sector_series = finviz_df_all.iloc[:, 3].astype(str).str.strip().str.lower()
+        finviz_df = finviz_df_all[~sector_series.isin(ignoresectors_set)]
+
+    debug(f"TABLE COUNT AFTER {len(finviz_df) if finviz_df is not None else 0}")
+
+    tickers = finviz_df["Ticker"].unique().tolist()
+
+    #debug(f"\nUniverse size: {len(tickers)}")
+
+    results = []
+
+    debug(f"USING PREMARKET DATA : {use_premarket_flag}\n")
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+
+        futures = {
+            pool.submit(yahoo_metrics, t, use_premarket_flag): t
+            for t in tickers
+        }
+
+        for fut in as_completed(futures):
+
+            t = futures[fut]
+
+            metrics = fut.result()
+
+            if not metrics:
+                continue
+
+            pre = safe_float(metrics.get("pre"), None)
+            if pre is None:
+                continue
+
+            gap = max(safe_float(metrics.get("gap"), 0.0), 0.0)
+            relvol = max(safe_float(metrics.get("relvol"), 0.0), 0.0)
+            atr_pct = max(safe_float(metrics.get("atr_pct"), 0.0), 0.0)
+
+            gap_term = math.log1p(min(gap, 120) / 20.0)             # heavier compression
+            relvol_term = math.log1p(relvol) ** 1.15       # slight boost
+            atr_term = math.log1p(atr_pct)
+
+            raw = gap_term * relvol_term * atr_term
+
+            score = round(raw * 55, 2)
+
+            rejected = False
+
+            #output_symbol_analysis(
+            #    f"{t} Price={pre:.2f} Gap={gap:.2f}% RelVol={relvol:.2f} ATR%={atr_pct} Score={score}"
+            #    )
+            
+            if pre is None or pre < SC_MIN_PRICE or pre > SC_MAX_PRICE:
+                output_symbol_analysis(f"{t} ❌ Price limit [{pre}] [{SC_MIN_PRICE}-{SC_MAX_PRICE}]")
+                rejected = True
+
+            if gap is None or gap < SC_GAP:
+                output_symbol_analysis(f"{t} ❌ Gap too small [{gap}] [{SC_GAP}]")
+                rejected = True
+
+            if relvol is None or relvol < SC_RELVOL:
+                # Rel Volume is Loweer then our Min
+                output_symbol_analysis(f"{t} ❌ RelVol low - Min [{relvol}] [{SC_RELVOL}]")
+                rejected = True
+
+            if atr_pct is None or atr_pct < SC_ATR:
+                output_symbol_analysis(f"{t} ❌ ATR low {atr_pct} [{SC_ATR}]")
+                rejected = True
+
+            if score is None or score < SC_MIN_SCORE:
+                output_symbol_analysis(f"{t} ❌ SCORE TR low [{score}] {SC_MIN_SCORE}]")
+                rejected = True
+
+            if rejected:
+                output_symbol_analysis(f"")
+                continue
+            
+            output_symbol_analysis(f"{t} ✅ Passed\n")
+
+            gap_dir = "Up" if gap > 0 else "Down"
+
+            tv_link = f"https://www.tradingview.com/chart/?symbol={t}"
+
+            results.append({
+                "Ticker": t,
+                "Premarket": round(pre, 3),
+                "Gap %": gap,
+                "Gap Dir": gap_dir,
+                "RelVol": round(relvol, 2),
+                "ATR %": round(atr_pct, 2),
+                "Score": score,
+                "Chart": tv_link
+            })
+
+    debug(f"\nExporting to CSV")
+
+    df = pd.DataFrame(results).sort_values("Score", ascending=False)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    #TODO SAVE TO DAY FOLDER
+    daydirname = datetime.now().strftime("%Y-%m-%d")
+    daypath = os.path.join(config.EXPORTS_DIR, daydirname)
+    os.makedirs(daypath, exist_ok=True)
+    print(f"DAY DIRECTORY {daydirname} | {daypath}")
+    #csv_file = os.path.join(config.EXPORTS_DIR,f"{config.OUTPUT_PREFIX}_{timestamp}.csv")
+    csv_file = os.path.join(config.EXPORTS_DIR, daydirname,f"{config.OUTPUT_PREFIX}_{timestamp}.csv")
+
+    df.to_csv(csv_file, index=False)
+
+    print(f"\n🔥 USE_PREMARKET is {config.USE_PREMARKET}")
+    print(f"🔥 FINAL {len(df)} QUALIFIERS")
+    print(df.head(25))
+    print(f"\n💾 Saved to {csv_file}")
+
+    if return_df:
+        return df
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print(f"\n\n{YELLOW}Scanner stopped.{RESET}\n")
-        sys.exit(0)
+
+    check_modules(check_module)
+    
+    previous_symbols = set()
+
+    while True:
+
+        df = scan()
+
+        if df is None or df.empty:
+            print("⚠️ No results returned, skipping this cycle")
+            time.sleep(REFRESH_SECONDS)
+            continue
+
+        # New tickers logic
+        current_symbols = set(df["Ticker"])
+        new_symbols = current_symbols - previous_symbols
+
+        if new_symbols:
+            beep()
+            #print("\n🆕 NEW TICKERS FOUND:")
+            lstSort = sorted(new_symbols)
+            output_string = ", ".join(lstSort)
+            print(f"\n🆕 NEW TICKERS FOUND: {output_string}")
+            #for s in lstSort:
+            #    print("  ", s)
+
+        previous_symbols = current_symbols
+        
+        time.sleep(REFRESH_SECONDS)

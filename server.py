@@ -1,3 +1,4 @@
+# server.py
 import json
 import logging
 import os
@@ -17,7 +18,7 @@ from flask_cors import CORS
 from config import config
 from outcomes import update_outcomes_from_rows
 from utils import sanitize_df_for_json, et_now_str, nullable_float
-from Production_Grade_Scanner import scan  # <-- change filename if needed
+from production_grade_scanner import scan
 
 # --------------------------
 # GLOBAL STATE (shared)
