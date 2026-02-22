@@ -25,6 +25,7 @@ from io import StringIO
 import pandas as pd
 import re
 import subprocess
+import uuid
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -315,20 +316,68 @@ def headline_has_keyword(headline, keywords):
     hl = headline.lower()
     return [kw for kw in keywords if kw.lower() in hl]
 
-# ── Logging ────────────────────────────────────────────────────────────────────
-def log_alert(cfg, alert):
-    log_path = os.path.join(SCRIPT_DIR, cfg["log_file"])
-    with open(log_path, "a", encoding="utf-8") as f:
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        f.write(
-            f"{ts} | {alert['priority']:8s} | "
-            f"{alert['ticker']:6s} | "
-            f"${alert.get('price','?'):>7} | "
-            f"News: {alert.get('news_time','?'):22s} | "
-            f"KW: {', '.join(alert.get('keywords',[])) or 'none':30s} | "
-            f"{alert['headline'][:80]} | "
-            f"{alert['source']}\n"
-        )
+# ── JSON Log ───────────────────────────────────────────────────────────────────
+JSON_LOG_VERSION = "1.0"
+
+def _json_log_path(cfg):
+    name = cfg.get("log_file", "alerts_log.json")
+    # Always use .json extension regardless of what config says
+    name = os.path.splitext(name)[0] + ".json"
+    return os.path.join(SCRIPT_DIR, name)
+
+def load_json_log(cfg):
+    """Load existing log or return empty structure."""
+    path = _json_log_path(cfg)
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                # Validate basic structure
+                if "alerts" in data:
+                    return data
+        except Exception:
+            pass
+    return {"version": JSON_LOG_VERSION, "generated": "", "alerts": []}
+
+def save_json_log(cfg, log_data):
+    """Write log to disk atomically."""
+    path = _json_log_path(cfg)
+    log_data["generated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(log_data, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, path)   # Atomic replace — no partial reads from browser
+
+def clear_is_new(log_data):
+    """Flip is_new=True → False at the start of each scan cycle."""
+    for alert in log_data["alerts"]:
+        alert["is_new"] = False
+
+def append_alert_to_log(cfg, log_data, alert):
+    """
+    Add one alert to the JSON log.
+    Enforces max_log_entries rotation (oldest removed first).
+    """
+    max_entries = cfg.get("max_log_entries", 90)
+    entry = {
+        "id":           str(uuid.uuid4()),
+        "timestamp":    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "news_time":    alert.get("news_time", ""),
+        "priority":     alert["priority"],
+        "ticker":       alert["ticker"],
+        "price":        alert.get("price", "N/A"),
+        "keywords":     alert.get("keywords", []),
+        "headline":     alert["headline"],
+        "source":       alert.get("source", ""),
+        "url":          alert.get("url", ""),
+        "linked_tickers": alert.get("linked_tickers", []),
+        "is_new":       True,
+        "sms_sent":     False,
+    }
+    log_data["alerts"].append(entry)
+    # Rotate — keep only the most recent max_entries
+    if len(log_data["alerts"]) > max_entries:
+        log_data["alerts"] = log_data["alerts"][-max_entries:]
 
 # ── Shared single-line alert formatter ────────────────────────────────────────
 def print_alert_row(a):
@@ -365,6 +414,7 @@ def main():
     seen_headlines = set()
     rolling        = deque(maxlen=500)
     scan_count     = 0
+    log_data       = None   # Loaded fresh each scan from disk
 
     while True:
         cfg       = load_config()
@@ -372,6 +422,10 @@ def main():
         keywords  = cfg["keywords"]
         mode      = cfg.get("keyword_alert_mode", "both")
         watchlist = set(t.upper() for t in cfg.get("watchlist", []))
+
+        # Load JSON log and flip is_new flags from previous scan
+        log_data = load_json_log(cfg)
+        clear_is_new(log_data)
 
         cls()
         print_header(cfg)
@@ -449,8 +503,11 @@ def main():
                         "age":       age,
                     }
                     rolling.append(alert)
-                    log_alert(cfg, alert)
+                    append_alert_to_log(cfg, log_data, alert)
                     new_alerts.append(alert)
+
+        # ── Save JSON log after all alerts processed this scan ────────────────
+        save_json_log(cfg, log_data)
 
         # ── Fire ONE beep for the whole scan ──────────────────────────────────
         if new_alerts:
@@ -472,7 +529,8 @@ def main():
         interval  = cfg["scan_interval_seconds"]
         next_scan = (datetime.now() + timedelta(seconds=interval)).strftime("%I:%M %p")
         print(f"  {DIM}Next scan in {interval}s  @  {next_scan} ET  |  Edit config.json anytime{RESET}")
-        print(f"  {DIM}Log: {os.path.join(SCRIPT_DIR, cfg['log_file'])}{RESET}")
+        log_path = _json_log_path(cfg)
+        print(f"  {DIM}Log: {log_path}{RESET}")
         print(f"{CYAN}{LINES_TO_PRINT*SYM_LIGHT}{RESET}")
 
         time.sleep(interval)
