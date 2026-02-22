@@ -1,6 +1,6 @@
 @echo off
-cd /d %~dp0
+rem cd /d %~dp0
 echo Starting Finviz News Scanner...
 echo.
-python finviz_scanner.py
+python .\finviz_news_scanner.py
 pause

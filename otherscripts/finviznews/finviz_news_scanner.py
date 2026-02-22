@@ -24,6 +24,7 @@ from collections import deque
 from io import StringIO
 import pandas as pd
 import re
+import subprocess
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -33,6 +34,9 @@ CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
 def load_config():
     with open(CONFIG_PATH, "r") as f:
         return json.load(f)
+
+# ── Variables ──────────────────────────────────────────────────────────────────
+LINES_TO_PRINT = 89
 
 # ── Terminal helpers ───────────────────────────────────────────────────────────
 RESET   = "\033[0m"
@@ -46,20 +50,20 @@ DIM     = "\033[2m"
 WHITE   = "\033[97m"
 
 def cls():
-    os.system("cls" if os.name == "nt" else "clear")
+    subprocess.run("cls" if os.name == "nt" else "clear", shell=True, check=False)
 
 def print_header(cfg):
     now       = datetime.now().strftime("%Y-%m-%d  %H:%M:%S ET")
     threshold = cfg["price_threshold_dollars"]
     interval  = cfg["scan_interval_seconds"]
     watches   = cfg.get("watchlist", [])
-    print(f"{BOLD}{CYAN}{'━'*85}{RESET}")
+    print(f"{BOLD}{CYAN}{'━'*LINES_TO_PRINT}{RESET}")
     print(f"{BOLD}{CYAN}  FINVIZ NEWS SCANNER{RESET}  {DIM}|  Price ≤ ${threshold:.2f}  |  Scan every {interval}s  |  {now}{RESET}")
-    print(f"{BOLD}{CYAN}{'━'*85}{RESET}")
+    print(f"{BOLD}{CYAN}{'━'*LINES_TO_PRINT}{RESET}")
     print(f"  {DIM}Keywords : {', '.join(cfg['keywords'][:6])}{'...' if len(cfg['keywords'])>6 else ''}{RESET}")
     if watches:
         print(f"  {DIM}Watchlist: {', '.join(watches)}{RESET}")
-    print(f"{CYAN}{'─'*80}{RESET}\n")
+    print(f"{CYAN}{'─'*LINES_TO_PRINT}{RESET}\n")
 
 # ── Beep: ONE beep per scan, pitched by highest priority ──────────────────────
 PRIORITY_ORDER = {"HIGH": 0, "WATCH": 1, "PRICE": 2, "KEYWORD": 3}
@@ -295,7 +299,7 @@ def display_rolling(rolling, cfg):
     # Take last N from the deque and reverse so newest is first
     recent = list(rolling)[-window:][::-1]
     print(f"\n{BOLD}{WHITE}  Recent Alerts  (showing {len(recent)} of {len(rolling)} total):{RESET}")
-    print(f"  {DIM}{'─'*76}{RESET}")
+    print(f"  {DIM}{'─'*LINES_TO_PRINT}{RESET}")
     for a in recent:
         pl      = priority_label(a["priority"])
         tk      = f"{BOLD}{a['ticker']:<4}{RESET}"
@@ -345,7 +349,10 @@ def main():
 
         new_alerts = []
 
-        for row in rows:
+        # Finviz returns rows newest-first — process in reverse (oldest first)
+        # so the deque appends oldest→newest, and the rolling display
+        # slice+reverse shows newest at the top correctly
+        for row in reversed(rows):
             headline    = row["headline"]
             tickers     = row["tickers"]
             source      = row["source"]
@@ -376,6 +383,14 @@ def main():
                     priority = "KEYWORD"
 
                 if priority:
+                    # ── Output filter: suppress high-priced KEYWORD/WATCH if configured
+                    if priority == "KEYWORD" and not cfg.get("output_keyword", True):
+                        seen_headlines.add(key)
+                        continue
+                    if priority == "WATCH" and not cfg.get("output_watch", True):
+                        seen_headlines.add(key)
+                        continue
+
                     seen_headlines.add(key)   # Mark as seen — will not re-fire
                     alert = {
                         "timestamp": datetime.now().strftime("%H:%M:%S"),
@@ -404,7 +419,7 @@ def main():
                 price = f"${alert['price']}"
                 kws   = f"  {GREEN}[{', '.join(alert['keywords'])}]{RESET}" if alert["keywords"] else ""
                 print(f"  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {DIM}{alert['news_time']}{RESET}  {alert['headline'][:55]}{kws}")
-                print(f"            {DIM}{alert['source']}{RESET}\n")
+                print(f"{DIM}{alert['source']}{RESET}\n")
         else:
             print(f"  {DIM}No new alerts this scan.{RESET}\n")
 
@@ -416,7 +431,7 @@ def main():
         next_scan = (datetime.now() + timedelta(seconds=interval)).strftime("%I:%M %p")
         print(f"  {DIM}Next scan in {interval}s  @  {next_scan} ET  |  Edit config.json anytime{RESET}")
         print(f"  {DIM}Log: {os.path.join(SCRIPT_DIR, cfg['log_file'])}{RESET}")
-        print(f"{CYAN}{'─'*80}{RESET}")
+        print(f"  {CYAN}{'─'*LINES_TO_PRINT}{RESET}")
 
         time.sleep(interval)
 
