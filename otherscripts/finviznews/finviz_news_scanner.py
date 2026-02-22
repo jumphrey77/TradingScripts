@@ -5,9 +5,10 @@ Scans Finviz news for tickers matching your price threshold and/or keywords.
 Alerts via terminal sound + print. Logs all alerts to file.
 Configure via config.json in the same directory.
 
-Alert Priority Levels :
-  [HIGH]   Ticker is under price threshold AND headline contains a keyword
-  [PRICE]  Ticker is under price threshold (screener match only)
+Alert Priority Levels:
+  [HIGH]    Ticker is under price threshold AND headline contains a keyword
+  [WATCH]   Ticker is in your watchlist (any price)
+  [PRICE]   Ticker is under price threshold (no keyword)
   [KEYWORD] Keyword matched but ticker is above price threshold
 """
 
@@ -22,6 +23,7 @@ from datetime import datetime, timedelta
 from collections import deque
 from io import StringIO
 import pandas as pd
+import re
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -38,6 +40,7 @@ RED    = "\033[91m"
 YELLOW = "\033[93m"
 CYAN   = "\033[96m"
 GREEN  = "\033[92m"
+MAGENTA= "\033[95m"
 BOLD   = "\033[1m"
 DIM    = "\033[2m"
 WHITE  = "\033[97m"
@@ -46,47 +49,94 @@ def cls():
     os.system("cls" if os.name == "nt" else "clear")
 
 def print_header(cfg):
-    now = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
+    now       = datetime.now().strftime("%Y-%m-%d  %H:%M:%S ET")
     threshold = cfg["price_threshold_dollars"]
     interval  = cfg["scan_interval_seconds"]
+    watches   = cfg.get("watchlist", [])
     print(f"{BOLD}{CYAN}{'━'*85}{RESET}")
-    print(f"{BOLD}{CYAN}  FINVIZ NEWS SCANNER{RESET}  {DIM}|  Price ≤ ${threshold:.2f}  |  Scan every {interval}s  |  {now}{RESET}")
+    print(f"{BOLD}{CYAN}  FINVIZ NEWS SCANNER{RESET}  {DIM}| Price ≤ ${threshold:.2f} | Scan every {interval}s | {now}{RESET}")
     print(f"{BOLD}{CYAN}{'━'*85}{RESET}")
-    print(f"  {DIM}Keywords: {', '.join(cfg['keywords'][:6])}{'...' if len(cfg['keywords'])>6 else ''}{RESET}")
+    print(f"  {DIM}Keywords : {', '.join(cfg['keywords'][:6])}{'...' if len(cfg['keywords'])>6 else ''}{RESET}")
+    if watches:
+        print(f"  {DIM}Watchlist: {', '.join(watches)}{RESET}")
     print(f"{CYAN}{'─'*80}{RESET}\n")
 
-def beep(cfg, priority):
-    """Play different beep patterns based on priority."""
-    repeat = cfg.get("alert_sound_repeat", 3)
-    if priority == "HIGH":
-        # Urgent: fast triple beep
+# ── Beep: ONE beep per scan, pitched by highest priority found ─────────────────
+PRIORITY_ORDER = {"HIGH": 0, "WATCH": 1, "PRICE": 2, "KEYWORD": 3}
+
+def beep_scan(cfg, alerts):
+    """Fire a single beep sequence representing the highest priority in this scan."""
+    if not alerts:
+        return
+    highest = min(alerts, key=lambda a: PRIORITY_ORDER.get(a["priority"], 99))["priority"]
+    repeat  = cfg.get("alert_sound_repeat", 3)
+    if highest == "HIGH":
         for _ in range(repeat):
             winsound.Beep(1200, 200)
             time.sleep(0.1)
-    elif priority == "PRICE":
-        # Medium: two beeps
-        for _ in range(2):
-            winsound.Beep(900, 300)
-            time.sleep(0.15)
+    elif highest == "WATCH":
+        winsound.Beep(950, 300)
+        time.sleep(0.12)
+        winsound.Beep(950, 300)
+    elif highest == "PRICE":
+        winsound.Beep(800, 300)
+        time.sleep(0.12)
+        winsound.Beep(800, 300)
     else:
-        # Keyword only: single lower beep
-        winsound.Beep(600, 400)
-
-def priority_color(priority):
-    if priority == "HIGH":
-        return RED + BOLD
-    elif priority == "PRICE":
-        return YELLOW + BOLD
-    else:
-        return CYAN
+        winsound.Beep(600, 450)
 
 def priority_label(priority):
     if priority == "HIGH":
-        return f"{RED}{BOLD}[HIGH ★]{RESET}"
+        return f"{RED}{BOLD}[HIGH ★ ]{RESET}"
+    elif priority == "WATCH":
+        return f"{MAGENTA}{BOLD}[WATCH  ]{RESET}"
     elif priority == "PRICE":
         return f"{YELLOW}{BOLD}[PRICE ↑]{RESET}"
     else:
         return f"{CYAN}[KEYWORD]{RESET}"
+
+# ── Age string → estimated ET datetime ────────────────────────────────────────
+def age_to_et(age_str):
+    """
+    Convert Finviz age strings like '27 min', '1 hour', '2 hours', '10:35AM'
+    into an estimated wall-clock ET datetime (now minus the offset).
+    Returns a formatted string like '10:08 ET' or '09:35 ET'.
+    """
+    now = datetime.now()
+    age = age_str.strip().lower()
+
+    # Already a wall-clock time e.g. "10:35AM" or "10:35am"
+    match = re.match(r"(\d{1,2}):(\d{2})\s*(am|pm)?", age)
+    if match:
+        h, m = int(match.group(1)), int(match.group(2))
+        meridiem = match.group(3)
+        if meridiem == "pm" and h != 12:
+            h += 12
+        elif meridiem == "am" and h == 12:
+            h = 0
+        dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
+        return dt.strftime("%b %d  %I:%M %p ET")
+
+    # "X min" or "X mins"
+    match = re.match(r"(\d+)\s*min", age)
+    if match:
+        dt = now - timedelta(minutes=int(match.group(1)))
+        return dt.strftime("%b %d  %I:%M %p ET")
+
+    # "X hour" or "X hours"
+    match = re.match(r"(\d+)\s*hour", age)
+    if match:
+        dt = now - timedelta(hours=int(match.group(1)))
+        return dt.strftime("%b %d  %I:%M %p ET")
+
+    # "X day" or "X days"
+    match = re.match(r"(\d+)\s*day", age)
+    if match:
+        dt = now - timedelta(days=int(match.group(1)))
+        return dt.strftime("%b %d  %I:%M %p ET")
+
+    # Fallback: return as-is
+    return age_str
 
 # ── Fetch Finviz news page ─────────────────────────────────────────────────────
 def fetch_news(cfg):
@@ -105,21 +155,16 @@ def parse_news_rows(html):
     Returns list of dicts:
       { 'age': str, 'headline': str, 'tickers': [str,...], 'source': str }
     Finviz news page shows up to ~90 stories.
-    Each row can have multiple ticker badges.
+    Each row can have multiple ticker badges (up to 9+).
     """
     soup = BeautifulSoup(html, "html.parser")
     rows = []
 
-    # News rows live in a table with class 'news-table' or similar
-    # We look for all <tr> that contain news-link elements
     news_table = soup.find("table", {"id": "news-table"})
     if not news_table:
-        # Fallback: find any table containing news-link class
         news_table = soup.find("table", class_=lambda c: c and "news" in c.lower())
     if not news_table:
-        # Broader fallback
-        all_tables = soup.find_all("table")
-        for t in all_tables:
+        for t in soup.find_all("table"):
             if t.find("a", class_=lambda c: c and "news" in str(c).lower()):
                 news_table = t
                 break
@@ -127,7 +172,6 @@ def parse_news_rows(html):
     if not news_table:
         return rows
 
-    current_date = None
     for tr in news_table.find_all("tr"):
         tds = tr.find_all("td")
         if not tds:
@@ -137,7 +181,8 @@ def parse_news_rows(html):
         time_text = ""
         for td in tds:
             txt = td.get_text(strip=True)
-            if txt and (":" in txt or "Today" in txt or "am" in txt.lower() or "pm" in txt.lower() or "hour" in txt.lower() or "min" in txt.lower()):
+            if txt and (":" in txt or "am" in txt.lower() or "pm" in txt.lower()
+                        or "hour" in txt.lower() or "min" in txt.lower() or "day" in txt.lower()):
                 time_text = txt
                 break
 
@@ -147,31 +192,25 @@ def parse_news_rows(html):
         if not link_tag:
             link_tag = tr.find("a", class_=lambda c: c and "news-link" in str(c))
         if not link_tag:
-            # any <a> that's not a ticker
-            links = tr.find_all("a")
-            for a in links:
-                cls_val = a.get("class", [])
-                cls_str = " ".join(cls_val) if cls_val else ""
+            for a in tr.find_all("a"):
+                cls_str = " ".join(a.get("class", []))
                 if "ticker" not in cls_str and len(a.get_text(strip=True)) > 15:
                     link_tag = a
                     break
         if link_tag:
             headline = link_tag.get_text(strip=True)
 
-        # All tickers on this row — Finviz renders them as small badge <a> elements
+        # All ticker badges on this row
         tickers = []
         for a in tr.find_all("a"):
             cls_val = " ".join(a.get("class", []))
             txt = a.get_text(strip=True)
-            # Ticker badges: short uppercase text, specific classes
-            if txt and txt.isupper() and 1 <= len(txt) <= 5 and (
-                "ticker" in cls_val.lower() or
-                "tab-link" not in cls_val.lower()
-            ):
+            if (txt and txt.isupper() and 1 <= len(txt) <= 5
+                    and ("ticker" in cls_val.lower() or "tab-link" not in cls_val.lower())):
                 if txt not in tickers and txt != headline:
                     tickers.append(txt)
 
-        # Source (last plain text cell)
+        # Source
         source = ""
         for td in reversed(tds):
             txt = td.get_text(strip=True)
@@ -181,34 +220,22 @@ def parse_news_rows(html):
 
         if headline and tickers:
             rows.append({
-                "age": time_text,
+                "age":      time_text,
                 "headline": headline,
-                "tickers": tickers,
-                "source": source
+                "tickers":  tickers,
+                "source":   source,
             })
 
     return rows
 
-# ── Screener constants ─────────────────────────────────────────────────────────
-# v=111 = basic screener view with Ticker, Price, Change, Volume columns
+# ── Screener price fetch (paginated, pandas-based) ─────────────────────────────
 SCREENER_VIEW = "111"
-SCREENER_COLS = "0,1,2,65"   # No, Ticker, Price, Change
+SCREENER_COLS = "0,1,2,65"
 
 def _fetch_screener_page(url, ticker_str, start, headers):
-    """
-    Fetch one page of Finviz screener results (20 rows per page).
-    Uses pandas.read_html for reliable table parsing — same approach
-    as the proven multi-page scanner.
-    Returns a DataFrame with columns [Ticker, Price, ...] or None.
-    """
-    params = {
-        "v": SCREENER_VIEW,
-        "t": ticker_str,
-        "c": SCREENER_COLS,
-        "r": start,          # pagination offset (1, 21, 41, ...)
-    }
+    params = {"v": SCREENER_VIEW, "t": ticker_str, "c": SCREENER_COLS, "r": start}
     try:
-        resp = requests.get(url, headers=headers, params=params, timeout=20)
+        resp   = requests.get(url, headers=headers, params=params, timeout=20)
         resp.raise_for_status()
         tables = pd.read_html(StringIO(resp.text))
     except Exception:
@@ -216,72 +243,48 @@ def _fetch_screener_page(url, ticker_str, start, headers):
 
     for t in tables:
         cols = [str(c).lower() for c in t.columns]
-
         if len(t) == 0:
             continue
-
-        # Must contain these columns
         required = ["ticker", "price", "change", "volume"]
         if not all(any(req in c for c in cols) for req in required):
             continue
-
-        # Finviz screener result tables are exactly 11 columns, max 20 rows
         if len(t) > 20 or len(t.columns) != 11:
             continue
-
-        # Sanity-check first row: Ticker should be a string
         if not isinstance(t.iloc[0]["Ticker"], str):
             continue
-
         return t
-
     return None
 
-
 def fetch_ticker_prices(tickers, cfg):
-    """
-    Paginate through Finviz screener for the given ticker list.
-    Finviz returns 20 rows per page — we step through until no more results.
-    Returns dict: { 'TICKER': float_price or None }
-    """
     if not tickers:
         return {}
-
-    prices    = {}
-    headers   = {"User-Agent": cfg["user_agent"]}
-    url       = cfg["finviz_screener_base_url"]
-    ticker_str = ",".join(tickers)   # pass full list; Finviz filters server-side
-
+    prices     = {}
+    headers    = {"User-Agent": cfg["user_agent"]}
+    url        = cfg["finviz_screener_base_url"]
+    ticker_str = ",".join(tickers)
     start = 1
     while True:
         df = _fetch_screener_page(url, ticker_str, start, headers)
-
         if df is None or len(df) == 0:
-            break   # No more pages
-
+            break
         for _, row in df.iterrows():
             ticker = str(row.get("Ticker", "")).strip()
-            raw_price = row.get("Price", None)
+            raw    = row.get("Price", None)
             if ticker:
                 try:
-                    prices[ticker] = float(str(raw_price).replace(",", ""))
+                    prices[ticker] = float(str(raw).replace(",", ""))
                 except (ValueError, TypeError):
                     prices[ticker] = None
-
         if len(df) < 20:
-            break   # Last page had fewer than 20 rows — we're done
-
+            break
         start += 20
-        time.sleep(0.5)   # Brief pause between pages to be polite
-
+        time.sleep(0.5)
     return prices
 
 # ── Keyword matching ───────────────────────────────────────────────────────────
 def headline_has_keyword(headline, keywords):
-    """Returns list of matched keywords (case-insensitive)."""
-    hl_lower = headline.lower()
-    matched = [kw for kw in keywords if kw.lower() in hl_lower]
-    return matched
+    hl = headline.lower()
+    return [kw for kw in keywords if kw.lower() in hl]
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 def log_alert(cfg, alert):
@@ -291,8 +294,9 @@ def log_alert(cfg, alert):
         f.write(
             f"{ts} | {alert['priority']:8s} | "
             f"{alert['ticker']:6s} | "
-            f"${alert.get('price', '?'):>7} | "
-            f"KW: {', '.join(alert.get('keywords', [])) or 'none':30s} | "
+            f"${alert.get('price','?'):>7} | "
+            f"News: {alert.get('news_time','?'):22s} | "
+            f"KW: {', '.join(alert.get('keywords',[])) or 'none':30s} | "
             f"{alert['headline'][:80]} | "
             f"{alert['source']}\n"
         )
@@ -301,17 +305,17 @@ def log_alert(cfg, alert):
 def display_rolling(rolling, cfg):
     window = cfg.get("rolling_display_window", 20)
     recent = list(rolling)[-window:]
-    print(f"\n{BOLD}{WHITE}  Recent Alerts (last {len(recent)} of {len(rolling)} total):{RESET}")
+    print(f"\n{BOLD}{WHITE}  Recent Alerts  (showing {len(recent)} of {len(rolling)} total):{RESET}")
     print(f"  {DIM}{'─'*76}{RESET}")
     for a in reversed(recent):
-        ts    = a['timestamp']
-        pl    = priority_label(a['priority'])
-        tk    = f"{BOLD}{a['ticker']:<4}{RESET}"
-        price = f"${a.get('price', '?')}"
-        kws   = ", ".join(a.get("keywords", [])) or ""
-        hl    = a['headline'][:50] + ("…" if len(a['headline']) > 55 else "")
-        kw_str = f"  {GREEN}↳ {kws}{RESET}" if kws else ""
-        print(f"  {DIM}{ts}{RESET}  {pl}  {tk:6s}  {YELLOW}{price:>8}{RESET}  {hl}{kw_str}")
+        pl       = priority_label(a["priority"])
+        tk       = f"{BOLD}{a['ticker']:<4}{RESET}"
+        price    = f"${a.get('price','?')}"
+        news_ts  = a.get("news_time", a["timestamp"])
+        kws      = ", ".join(a.get("keywords", [])) or ""
+        hl       = a["headline"][:50] + ("…" if len(a["headline"]) > 50 else "")
+        kw_str   = f"  {GREEN}↳ {kws}{RESET}" if kws else ""
+        print(f"  {DIM}{news_ts}{RESET}  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {hl}{kw_str}")
     print()
 
 # ── Main scan loop ─────────────────────────────────────────────────────────────
@@ -319,15 +323,16 @@ def main():
     print(f"{BOLD}{CYAN}Starting Finviz News Scanner...{RESET}")
     print(f"Config: {CONFIG_PATH}\n")
 
-    seen_headlines = set()       # Track already-alerted headline+ticker combos
-    rolling = deque(maxlen=500)  # Rolling alert history
-    scan_count = 0
+    seen_headlines = set()
+    rolling        = deque(maxlen=500)
+    scan_count     = 0
 
     while True:
-        cfg = load_config()  # Reload config each scan so edits take effect live
+        cfg       = load_config()
         threshold = cfg["price_threshold_dollars"]
         keywords  = cfg["keywords"]
         mode      = cfg.get("keyword_alert_mode", "both")
+        watchlist = set(t.upper() for t in cfg.get("watchlist", []))
 
         cls()
         print_header(cfg)
@@ -340,35 +345,39 @@ def main():
             time.sleep(cfg["scan_interval_seconds"])
             continue
 
-        rows = parse_news_rows(html)
+        rows        = parse_news_rows(html)
         all_tickers = list({t for row in rows for t in row["tickers"]})
-        print(f"  {DIM}Parsed {len(rows)} news rows  |  {len(all_tickers)} unique tickers  |  Fetching prices...{RESET}")
+        print(f"  {DIM}Parsed {len(rows)} rows  |  {len(all_tickers)} unique tickers  |  Fetching prices...{RESET}")
 
-        prices = fetch_ticker_prices(all_tickers, cfg)
+        prices   = fetch_ticker_prices(all_tickers, cfg)
         resolved = sum(1 for v in prices.values() if v is not None)
         print(f"  {DIM}Prices resolved: {resolved}/{len(all_tickers)}{RESET}\n")
 
-        new_alerts_this_scan = []
+        new_alerts = []
 
         for row in rows:
-            headline = row["headline"]
-            tickers  = row["tickers"]
-            source   = row["source"]
-            age      = row["age"]
+            headline    = row["headline"]
+            tickers     = row["tickers"]
+            source      = row["source"]
+            age         = row["age"]
+            news_time   = age_to_et(age)
             matched_kws = headline_has_keyword(headline, keywords)
 
             for ticker in tickers:
                 key = f"{ticker}::{headline}"
                 if key in seen_headlines:
-                    continue  # Already alerted on this combo
+                    continue
 
-                price = prices.get(ticker)
-                under_threshold = (price is not None and price <= threshold)
+                price            = prices.get(ticker)
+                under_threshold  = (price is not None and price <= threshold)
+                is_watched       = ticker in watchlist
 
-                # Determine priority
+                # Priority determination
                 priority = None
                 if under_threshold and matched_kws:
                     priority = "HIGH"
+                elif is_watched:
+                    priority = "WATCH"
                 elif under_threshold and mode in ("both", "price"):
                     priority = "PRICE"
                 elif matched_kws and mode in ("both", "keyword"):
@@ -378,9 +387,10 @@ def main():
                     seen_headlines.add(key)
                     alert = {
                         "timestamp": datetime.now().strftime("%H:%M:%S"),
+                        "news_time": news_time,
                         "priority":  priority,
                         "ticker":    ticker,
-                        "price":     f"{price:.2f}" if price else "N/A",
+                        "price":     f"{price:.2f}" if price is not None else "N/A",
                         "keywords":  matched_kws,
                         "headline":  headline,
                         "source":    source,
@@ -388,38 +398,31 @@ def main():
                     }
                     rolling.append(alert)
                     log_alert(cfg, alert)
-                    new_alerts_this_scan.append(alert)
+                    new_alerts.append(alert)
 
-        # Fire alerts for new hits
-        if new_alerts_this_scan:
-            # Sort by priority: HIGH first
-            order = {"HIGH": 0, "PRICE": 1, "KEYWORD": 2}
-            new_alerts_this_scan.sort(key=lambda a: order[a["priority"]])
+        # ── Fire ONE beep for the whole scan ──────────────────────────────────
+        if new_alerts:
+            new_alerts.sort(key=lambda a: PRIORITY_ORDER.get(a["priority"], 99))
+            beep_scan(cfg, new_alerts)
 
-            for alert in new_alerts_this_scan:
-                beep(cfg, alert["priority"])
-                #time.sleep(0.3)
-                break
-
-            print(f"\n{RED}{BOLD}  *** {len(new_alerts_this_scan)} NEW ALERT(S) THIS SCAN ***{RESET}\n")
-            for alert in new_alerts_this_scan:
+            print(f"\n{RED}{BOLD}  *** {len(new_alerts)} NEW ALERT(S) THIS SCAN ***{RESET}\n")
+            for alert in new_alerts:
                 pl    = priority_label(alert["priority"])
-                tk    = f"{BOLD}{alert['ticker']}{RESET}"
+                tk    = f"{BOLD}{alert['ticker']:<4}{RESET}"
                 price = f"${alert['price']}"
                 kws   = f"  {GREEN}[{', '.join(alert['keywords'])}]{RESET}" if alert["keywords"] else ""
-                print(f"  {pl}  {tk:6s}  {YELLOW}{price:>8}{RESET}  {alert['headline'][:60]}{kws}")
-                print(f"         {DIM}{alert['source']}  ({alert['age']}){RESET}\n")
+                watch_tag = f"  {MAGENTA}[WATCHLIST]{RESET}" if alert["ticker"] in watchlist else ""
+                print(f"  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {DIM}{alert['news_time']}{RESET}  {alert['headline'][:55]}{kws}{watch_tag}")
+                print(f"            {DIM}{alert['source']}{RESET}\n")
         else:
             print(f"  {DIM}No new alerts this scan.{RESET}\n")
 
-        # Display rolling window
         if rolling:
             display_rolling(rolling, cfg)
 
-        # Countdown
         interval = cfg["scan_interval_seconds"]
-        print(f"  {DIM}Next scan in {interval}s. Edit config.json to change settings live.{RESET}")
-        print(f"  {DIM}Log file: {os.path.join(SCRIPT_DIR, cfg['log_file'])}{RESET}")
+        print(f"  {DIM}Next scan in {interval}s  |  Edit config.json anytime — changes apply next scan{RESET}")
+        print(f"  {DIM}Log: {os.path.join(SCRIPT_DIR, cfg['log_file'])}{RESET}")
         print(f"{CYAN}{'─'*80}{RESET}")
 
         time.sleep(interval)
