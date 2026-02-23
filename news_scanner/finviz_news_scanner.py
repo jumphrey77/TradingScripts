@@ -26,6 +26,10 @@ import pandas as pd
 import re
 import subprocess
 import uuid
+import threading
+import socket
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+import logging
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -385,6 +389,43 @@ def append_alert_to_log(cfg, log_data, alert):
     if len(log_data["alerts"]) > max_entries:
         log_data["alerts"] = log_data["alerts"][-max_entries:]
 
+
+# ── Web server — serves the scanner folder over HTTP ─────────────────────────
+class _QuietHandler(SimpleHTTPRequestHandler):
+    """Serve SCRIPT_DIR silently — no request logs cluttering the console."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=SCRIPT_DIR, **kwargs)
+
+    def log_message(self, fmt, *args):
+        pass  # Suppress HTTP request logs
+
+    def end_headers(self):
+        # Allow local network access (CORS for future React integration)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        super().end_headers()
+
+def _get_local_ip():
+    """Best-effort local WiFi IP for display purposes."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "localhost"
+
+def start_web_server(port):
+    """Start HTTP server in a daemon thread — dies when scanner exits."""
+    try:
+        server = HTTPServer(("", port), _QuietHandler)
+        t = threading.Thread(target=server.serve_forever, daemon=True)
+        t.start()
+        return True
+    except OSError:
+        return False  # Port already in use
+
 # ── Shared single-line alert formatter ────────────────────────────────────────
 def print_alert_row(a):
     """Single consistent format used in both NEW ALERTS and Recent Alerts."""
@@ -417,6 +458,19 @@ def display_rolling(rolling, cfg):
 def main():
     print(f"{BOLD}{CYAN}Starting Finviz News Scanner...{RESET}")
     print(f"Config: {CONFIG_PATH}\n")
+
+    # ── Start web server ──────────────────────────────────────────────────
+    _cfg_init  = load_config()
+    _port      = _cfg_init.get("web_server_port", 8765)
+    _ok        = start_web_server(_port)
+    _local_ip  = _get_local_ip()
+    if _ok:
+        print(f"{GREEN}  Web server started:{RESET}")
+        print(f"  {BOLD}http://localhost:{_port}/alerts.html{RESET}  (this PC)")
+        print(f"  {BOLD}http://{_local_ip}:{_port}/alerts.html{RESET}  (local WiFi)")
+    else:
+        print(f"{YELLOW}  Web server port {_port} in use — view may not work{RESET}")
+    print()
 
     # Key = "TICKER::headline_text" — persists across scans to prevent duplicates
     seen_headlines = set()
@@ -549,10 +603,10 @@ def main():
         interval  = cfg["scan_interval_seconds"]
         next_scan = (datetime.now() + timedelta(seconds=interval)).strftime("%I:%M %p")
         print(f"  {DIM}Next scan in {interval}s  @  {next_scan} ET  |  Edit config.json anytime{RESET}")
-        log_path  = _json_log_path(cfg)
-        html_path = os.path.join(SCRIPT_DIR, "alerts.html")
+        _port2   = cfg.get("web_server_port", 8765)
+        log_path = _json_log_path(cfg)
         print(f"  {DIM}Log : {log_path}{RESET}")
-        print(f"  {DIM}View: file:///{html_path.replace(chr(92), "/")}{RESET}")
+        print(f"  {DIM}View: http://localhost:{_port2}/alerts.html{RESET}")
         print(f"{CYAN}{LINES_TO_PRINT*SYM_LIGHT}{RESET}")
 
         time.sleep(interval)

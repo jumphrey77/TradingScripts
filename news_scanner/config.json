@@ -2,17 +2,14 @@
   "price_threshold_dollars": 10.0,
   "scan_interval_seconds": 120,
   "news_max_age_hours": 4,
-  "alert_sound_repeat": 1,
+  "alert_sound_repeat": 3,
   "rolling_display_window": 20,
   "log_file": "alerts_log.json",
   "min_avg_volume": 500000,
   "min_relative_volume": 2.0,
   "max_float_million": 100,
   "watchlist": [
-    "RXT",
-    "NVDA",
-    "PLTR",
-    "GOOGL"
+    "RXT"
   ],
   "keywords": [
     "partnership",
@@ -36,5 +33,6 @@
   "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   "output_keyword": true,
   "output_watch": true,
-  "max_log_entries": 90
+  "max_log_entries": 90,
+  "web_server_port": 8765
 }
