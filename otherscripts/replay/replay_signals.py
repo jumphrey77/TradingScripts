@@ -1,3 +1,4 @@
+# replay_signals.py
 #!/usr/bin/env python3
 """
 Replay scanner signal logs against Yahoo intraday history (cached) and compute outcomes.
@@ -9,7 +10,6 @@ Usage examples:
 """
 
 from __future__ import annotations
-
 import argparse
 import os
 import sys
@@ -21,10 +21,7 @@ from dataclasses import dataclass
 from datetime import datetime, date, timedelta
 from zoneinfo import ZoneInfo
 from typing import Dict, Any, Optional, Tuple, List
-
 import pandas as pd
-
-# yfinance is what you're already using
 import yfinance as yf
 
 NY = ZoneInfo("America/New_York")

@@ -1,10 +1,10 @@
 import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
-import MomentumDashboard from "./pages/MomentumDashboard";
-import ScannerConfigPage from "./pages/ScannerConfigPage"; 
-import StockPurchaseCalculator from "./pages/StockPurchaseCalculator";
-import SimulatorPage from "./pages/SimulatorPage";
+import MomentumDashboard from "./pages/momentumdashboard";
+import ScannerConfigPage from "./pages/scannerconfigpage";
+import StockPurchaseCalculator from "./pages/stockpurchasecalculator";
+import SimulatorPage from "./pages/simulatorpage";
 
 
 function App() {
