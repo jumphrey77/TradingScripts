@@ -398,8 +398,10 @@ def print_alert_row(a):
     kws     = ", ".join(a.get("keywords", [])) or ""
     hl      = a["headline"][:48] + ("…" if len(a["headline"]) > 48 else "")
     hl      = f"{hl:<49}"  # pad to fixed width so keywords always start at same column
-    kw_str  = f"  {GREEN}{SYM_ARROW} {kws}{RESET}" if kws else ""
-    print(f"  {DIM}{news_ts}{RESET}  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {hl}{kw_str}")
+    kw_str    = f"  {GREEN}{SYM_ARROW} {kws}{RESET}" if kws else ""
+    linked    = a.get("linked_tickers", [])
+    link_str  = f"  {DIM}[linked: {" ".join(linked)}]{RESET}" if linked else ""
+    print(f"  {DIM}{news_ts}{RESET}  {pl}  {tk}  {YELLOW}{price:>8}{RESET}  {hl}{kw_str}{link_str}")
 
 # ── Display rolling window — most recent ON TOP ────────────────────────────────
 def display_rolling(rolling, cfg):
@@ -547,8 +549,10 @@ def main():
         interval  = cfg["scan_interval_seconds"]
         next_scan = (datetime.now() + timedelta(seconds=interval)).strftime("%I:%M %p")
         print(f"  {DIM}Next scan in {interval}s  @  {next_scan} ET  |  Edit config.json anytime{RESET}")
-        log_path = _json_log_path(cfg)
-        print(f"  {DIM}Log: {log_path}{RESET}")
+        log_path  = _json_log_path(cfg)
+        html_path = os.path.join(SCRIPT_DIR, "alerts.html")
+        print(f"  {DIM}Log : {log_path}{RESET}")
+        print(f"  {DIM}View: file:///{html_path.replace(chr(92), "/")}{RESET}")
         print(f"{CYAN}{LINES_TO_PRINT*SYM_LIGHT}{RESET}")
 
         time.sleep(interval)

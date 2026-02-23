@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en" class="theme-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Finviz News Scanner — Alerts</title>
+  <style>
+    /* ── Theme variables — mirrors theme.css exactly ─────────────────────── */
+    .theme-dark {
+      --bg:               #0b1220;
+      --text:             #e5e7eb;
+      --muted:            rgba(229, 231, 235, 0.7);
+      --border:           rgba(148, 163, 184, 0.25);
+      --card-bg:          rgba(2, 6, 23, 0.85);
+      --card-border:      rgba(148, 163, 184, 0.25);
+      --shadow:           0 10px 30px rgba(0,0,0,0.35);
+      --card-new-bg:      rgba(255, 165, 0, 0.10);
+      --card-new-border:  #ffa500;
+      --card-new-glow:    0 0 0 3px rgba(255,165,0,0.20);
+      --accent:           #22c55e;
+      --warning:          #ffa500;
+      --link:             #60a5fa;
+      --input-bg:         rgba(255,255,255,0.06);
+      --input-border:     rgba(148,163,184,0.3);
+    }
+    .theme-light {
+      --bg:               #f7f7fb;
+      --text:             #111827;
+      --muted:            rgba(17, 24, 39, 0.65);
+      --border:           rgba(17, 24, 39, 0.18);
+      --card-bg:          #ffffff;
+      --card-border:      rgba(17, 24, 39, 0.18);
+      --shadow:           0 10px 30px rgba(0,0,0,0.12);
+      --card-new-bg:      #fffae6;
+      --card-new-border:  #f59e0b;
+      --card-new-glow:    0 0 0 3px rgba(245,158,11,0.20);
+      --accent:           #16a34a;
+      --warning:          #f59e0b;
+      --link:             #2563eb;
+      --input-bg:         rgba(0,0,0,0.04);
+      --input-border:     rgba(17,24,39,0.2);
+    }
+
+    /* ── Priority colors ─────────────────────────────────────────────────── */
+    :root {
+      --high:    #ef4444;
+      --watch:   #d946ef;
+      --price:   #ffa500;
+      --keyword: #22c55e;
+    }
+
+    /* ── Reset & base ────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Courier New', 'Consolas', monospace;
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    a { color: var(--link); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ──────────────────────────────────────────────────────────── */
+    .page {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .title {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      color: var(--text);
+    }
+    .title span { color: var(--accent); }
+
+    .meta {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .meta .dot::before { content: "● "; color: var(--accent); }
+
+    .refresh-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .refresh-badge .spinner {
+      width: 8px; height: 8px;
+      border: 1.5px solid var(--muted);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .refresh-badge.loading .spinner { animation: spin 0.7s linear infinite; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Controls bar ────────────────────────────────────────────────────── */
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .filter-btn {
+      padding: 3px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--input-bg);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .filter-btn.active { color: var(--text); border-color: currentColor; }
+    .filter-btn.active.f-high    { color: var(--high);    border-color: var(--high); }
+    .filter-btn.active.f-watch   { color: var(--watch);   border-color: var(--watch); }
+    .filter-btn.active.f-price   { color: var(--price);   border-color: var(--price); }
+    .filter-btn.active.f-keyword { color: var(--keyword); border-color: var(--keyword); }
+
+    .spacer { flex: 1; }
+
+    .theme-toggle {
+      padding: 3px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--input-bg);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      font-family: inherit;
+    }
+
+    .count-label {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ── Table ───────────────────────────────────────────────────────────── */
+    .alerts-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .alerts-table thead th {
+      text-align: left;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .alerts-table tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.15s;
+    }
+
+    .alerts-table tbody tr:hover {
+      background: rgba(255,255,255,0.03);
+    }
+
+    .alerts-table tbody tr.is-new {
+      background: var(--card-new-bg);
+      border-left: 3px solid var(--card-new-border);
+      box-shadow: var(--card-new-glow);
+      animation: fadeNew 3s ease-out forwards;
+    }
+
+    @keyframes fadeNew {
+      0%   { background: rgba(255,165,0,0.18); }
+      100% { background: var(--card-new-bg); }
+    }
+
+    .alerts-table td {
+      padding: 7px 10px;
+      vertical-align: middle;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .td-time   { color: var(--muted); font-size: 11px; min-width: 140px; }
+    .td-badge  { min-width: 90px; }
+    .td-ticker { font-weight: 800; font-size: 13px; min-width: 60px; }
+    .td-price  { font-weight: 700; color: var(--warning); text-align: right; min-width: 70px; }
+    .td-hl     { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .td-kw     { min-width: 100px; }
+    .td-linked { color: var(--muted); font-size: 11px; min-width: 100px; }
+    .td-src    { color: var(--muted); font-size: 11px; min-width: 80px; }
+
+    /* ── Priority badge ──────────────────────────────────────────────────── */
+    .badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid currentColor;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+    .badge-HIGH    { color: var(--high);    }
+    .badge-WATCH   { color: var(--watch);   }
+    .badge-PRICE   { color: var(--price);   }
+    .badge-KEYWORD { color: var(--keyword); }
+
+    /* ── Keyword pills ───────────────────────────────────────────────────── */
+    .kw-pill {
+      display: inline-block;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(34,197,94,0.12);
+      color: var(--accent);
+      border: 1px solid rgba(34,197,94,0.25);
+      margin-right: 3px;
+      white-space: nowrap;
+    }
+
+    /* ── Linked tickers ──────────────────────────────────────────────────── */
+    .linked-ticker {
+      display: inline-block;
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(148,163,184,0.08);
+      border: 1px solid rgba(148,163,184,0.2);
+      color: var(--muted);
+      margin-right: 3px;
+    }
+
+    /* ── Empty / error states ────────────────────────────────────────────── */
+    .state-msg {
+      padding: 40px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────────────── */
+    .footer {
+      margin-top: 20px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────────────── */
+    @media (max-width: 800px) {
+      .td-src, .td-linked { display: none; }
+      .td-hl { max-width: 200px; }
+    }
+    @media (max-width: 500px) {
+      .td-kw { display: none; }
+      .td-time { min-width: 80px; font-size: 10px; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="title">FINVIZ NEWS SCANNER &mdash; <span>ALERTS</span></div>
+    <div class="meta">
+      <span class="dot" id="generated-ts">Loading...</span>
+      <span class="refresh-badge" id="refresh-badge">
+        <span class="spinner"></span>
+        <span id="refresh-label">Refreshing...</span>
+      </span>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="filter-btn active f-high"    data-filter="HIGH"    onclick="toggleFilter(this)">HIGH ★</button>
+    <button class="filter-btn active f-watch"   data-filter="WATCH"   onclick="toggleFilter(this)">WATCH</button>
+    <button class="filter-btn active f-price"   data-filter="PRICE"   onclick="toggleFilter(this)">PRICE</button>
+    <button class="filter-btn active f-keyword" data-filter="KEYWORD" onclick="toggleFilter(this)">KEYWORD</button>
+    <span class="spacer"></span>
+    <span class="count-label" id="count-label"></span>
+    <button class="theme-toggle" onclick="toggleTheme()">Toggle Theme</button>
+  </div>
+
+  <!-- Table -->
+  <div id="alerts-container">
+    <div class="state-msg">Loading alerts...</div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span>Auto-refreshes every <span id="interval-label">30</span>s &nbsp;|&nbsp; Data from alerts_log.json</span>
+    <span id="next-refresh-label"></span>
+  </div>
+
+</div>
+
+<script>
+  // ── Config ────────────────────────────────────────────────────────────────
+  const JSON_PATH      = "alerts_log.json";   // relative to this HTML file
+  let   REFRESH_SEC    = 30;                   // overridden by JSON meta if present
+  let   refreshTimer   = null;
+  let   countdownTimer = null;
+  let   nextRefresh    = null;
+  let   activeFilters  = new Set(["HIGH","WATCH","PRICE","KEYWORD"]);
+
+  // ── Theme ─────────────────────────────────────────────────────────────────
+  function applyTheme(t) {
+    document.documentElement.className = t === "light" ? "theme-light" : "theme-dark";
+    localStorage.setItem("scanner_theme", t);
+  }
+  function toggleTheme() {
+    const cur = document.documentElement.className.includes("light") ? "light" : "dark";
+    applyTheme(cur === "light" ? "dark" : "light");
+  }
+  // Restore saved theme
+  applyTheme(localStorage.getItem("scanner_theme") || "dark");
+
+  // ── Filters ───────────────────────────────────────────────────────────────
+  function toggleFilter(btn) {
+    const f = btn.dataset.filter;
+    if (activeFilters.has(f)) {
+      activeFilters.delete(f);
+      btn.classList.remove("active");
+    } else {
+      activeFilters.add(f);
+      btn.classList.add("active");
+    }
+    renderTable(window._lastData);
+  }
+
+  // ── Fetch & render ────────────────────────────────────────────────────────
+  async function fetchAlerts() {
+    const badge = document.getElementById("refresh-badge");
+    badge.classList.add("loading");
+    try {
+      // Cache-bust so browser always fetches fresh JSON
+      const res  = await fetch(JSON_PATH + "?t=" + Date.now());
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      window._lastData = data;
+
+      // Update refresh interval from JSON if scanner wrote it
+      if (data.refresh_seconds) {
+        REFRESH_SEC = data.refresh_seconds;
+        document.getElementById("interval-label").textContent = REFRESH_SEC;
+      }
+
+      // Update generated timestamp
+      if (data.generated) {
+        document.getElementById("generated-ts").textContent = "Last scan: " + data.generated;
+      }
+
+      renderTable(data);
+    } catch (e) {
+      document.getElementById("alerts-container").innerHTML =
+        `<div class="state-msg">Could not load alerts_log.json<br><small>${e.message}</small><br><br>
+         <small>Make sure the scanner is running and this file is in the same folder as alerts.html</small></div>`;
+    } finally {
+      badge.classList.remove("loading");
+      document.getElementById("refresh-label").textContent =
+        "Refreshed " + new Date().toLocaleTimeString();
+      scheduleNext();
+    }
+  }
+
+  function renderTable(data) {
+    if (!data || !data.alerts) return;
+
+    // Filter and sort newest first
+    const alerts = [...data.alerts]
+      .filter(a => activeFilters.has(a.priority))
+      .reverse();
+
+    const countEl = document.getElementById("count-label");
+    countEl.textContent = alerts.length + " alert" + (alerts.length !== 1 ? "s" : "");
+
+    if (alerts.length === 0) {
+      document.getElementById("alerts-container").innerHTML =
+        `<div class="state-msg">No alerts match current filters.</div>`;
+      return;
+    }
+
+    const rows = alerts.map(a => {
+      const isNew   = a.is_new ? "is-new" : "";
+      const badgeCls = "badge badge-" + a.priority;
+      const badgeTxt = {
+        HIGH:    "HIGH ★",
+        WATCH:   "WATCH",
+        PRICE:   "PRICE ↑",
+        KEYWORD: "KEYWORD"
+      }[a.priority] || a.priority;
+
+      // Keywords as pills
+      const kwHtml = (a.keywords || [])
+        .map(k => `<span class="kw-pill">${esc(k)}</span>`)
+        .join("");
+
+      // Linked tickers
+      const linkedHtml = (a.linked_tickers || [])
+        .map(t => `<span class="linked-ticker">${esc(t)}</span>`)
+        .join("");
+
+      // Headline — link if URL available
+      const hlText = esc(a.headline);
+      const hlHtml = a.url
+        ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">${hlText}</a>`
+        : hlText;
+
+      const price = a.price && a.price !== "N/A" ? "$" + a.price : "N/A";
+
+      return `
+        <tr class="${isNew}">
+          <td class="td-time">${esc(a.news_time || a.timestamp || "")}</td>
+          <td class="td-badge"><span class="${badgeCls}">${badgeTxt}</span></td>
+          <td class="td-ticker">${esc(a.ticker)}</td>
+          <td class="td-price">${price}</td>
+          <td class="td-hl">${hlHtml}</td>
+          <td class="td-kw">${kwHtml}</td>
+          <td class="td-linked">${linkedHtml}</td>
+          <td class="td-src">${esc(a.source || "")}</td>
+        </tr>`;
+    }).join("");
+
+    document.getElementById("alerts-container").innerHTML = `
+      <table class="alerts-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Priority</th>
+            <th>Ticker</th>
+            <th>Price</th>
+            <th>Headline</th>
+            <th>Keywords</th>
+            <th>Linked</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  // ── Countdown ─────────────────────────────────────────────────────────────
+  function scheduleNext() {
+    clearTimeout(refreshTimer);
+    clearInterval(countdownTimer);
+    nextRefresh = Date.now() + REFRESH_SEC * 1000;
+
+    countdownTimer = setInterval(() => {
+      const sec = Math.max(0, Math.round((nextRefresh - Date.now()) / 1000));
+      document.getElementById("next-refresh-label").textContent =
+        "Next refresh in " + sec + "s";
+    }, 1000);
+
+    refreshTimer = setTimeout(fetchAlerts, REFRESH_SEC * 1000);
+  }
+
+  // ── Escape HTML ───────────────────────────────────────────────────────────
+  function esc(str) {
+    return String(str || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;");
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+  fetchAlerts();
+</script>
+</body>
+</html>

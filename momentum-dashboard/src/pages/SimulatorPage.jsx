@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import styles from "../styles/SimulatorPage.module.css";
+import styles from "../styles/simulatorpage.module.css";
 import {fmtPct, fmtTime, toNumMaybe} from '../utils/formaters'
 
 function parseTSV(tsvText) {

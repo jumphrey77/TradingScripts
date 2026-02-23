@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import styles from "../styles/MomentumDashboard.module.css";
+import styles from "../styles/momentumdashboard.module.css";
 
 const cx = (...classes) => classes.filter(Boolean).join(" ");
 
