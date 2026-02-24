@@ -362,9 +362,16 @@ def load_json_log(cfg):
     return {"version": JSON_LOG_VERSION, "generated": "", "alerts": []}
 
 def save_json_log(cfg, log_data):
-    """Write log to disk atomically."""
+    """Write log to disk atomically. Embeds scanner_runtime from cfg each save."""
     path = _json_log_path(cfg)
     log_data["generated"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_data["scanner_runtime"] = {
+        "price_threshold_dollars": cfg.get("price_threshold_dollars", 10.0),
+        "watchlist":               cfg.get("watchlist", []),
+        "keywords":                cfg.get("keywords", []),
+        "keyword_alert_mode":      cfg.get("keyword_alert_mode", "both"),
+        "scan_interval_seconds":   cfg.get("scan_interval_seconds", 120),
+    }
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(log_data, f, indent=2, ensure_ascii=False)

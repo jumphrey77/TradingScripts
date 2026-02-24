@@ -440,13 +440,13 @@
     <span class="spacer"></span>
     <span class="count-label" id="count-label"></span>
     <button class="ctrl-btn" onclick="toggleTheme()">Toggle Theme</button>
-    <button class="ctrl-btn" id="filters-btn" onclick="togglePopup()">Filters</button>
+    <button class="ctrl-btn" id="filters-btn" onclick="togglePopup(event)">Filters</button>
 
     <!-- Advanced Filters Popup -->
     <div class="filters-popup" id="filters-popup">
       <div class="popup-title">
         Advanced Filters
-        <button class="popup-close" onclick="togglePopup()">✕</button>
+        <button class="popup-close" onclick="closePopup()">✕</button>
       </div>
 
       <div class="popup-section">
@@ -537,14 +537,14 @@
   function closePopup() {
     document.getElementById("filters-popup").classList.remove("open");
   }
-  function togglePopup() {
+  function togglePopup(e) {
+    if (e) e.stopPropagation();  // prevent bubbling to document close-listener
     const isOpen = document.getElementById("filters-popup").classList.contains("open");
     if (isOpen) closePopup(); else openPopup();
   }
   document.addEventListener("click", e => {
     const popup = document.getElementById("filters-popup");
-    const btn   = document.getElementById("filters-btn");
-    if (!popup.contains(e.target) && e.target !== btn)
+    if (!popup.contains(e.target))
       closePopup();
   });
 
@@ -584,7 +584,7 @@
     if (advPMin)           parts.push(`≥$${advPMin}`);
     if (advPMax)           parts.push(`≤$${advPMax}`);
     document.getElementById("adv-indicators").innerHTML =
-      parts.map(p => `<span class="adv-pill" onclick="togglePopup()" title="Click to edit filters">${p} ✕</span>`).join("");
+      parts.map(p => `<span class="adv-pill" role="button" onclick="openPopup()" title="Click to edit filters">${p} ✕</span>`).join("");
     document.getElementById("filters-btn").classList.toggle("active", parts.length > 0);
   }
 
@@ -778,38 +778,23 @@
   function renderFooterKey(data) {
     const el = document.getElementById("key-bar");
     if (!el) return;
-    // Pull watchlist + keywords + threshold from JSON meta if present
-    // Fall back to scanning the alert data for hints
-    const watchSet = new Set();
-    const kwSet    = new Set();
-    let   threshold = null;
-    if (data) {
-      (data.alerts || []).forEach(a => {
-        if (a.priority === "WATCH") watchSet.add(a.ticker);
-        (a.keywords || []).forEach(k => kwSet.add(k));
-        if (a.priority === "PRICE" || a.priority === "HIGH") {
-          const p = parseFloat(a.price);
-          if (!isNaN(p)) threshold = threshold === null ? p : Math.max(threshold, p);
-        }
-      });
-      if (data.config) {
-        (data.config.watchlist || []).forEach(t => watchSet.add(t));
-        (data.config.keywords  || []).forEach(k => kwSet.add(k));
-        if (data.config.price_threshold_dollars)
-          threshold = data.config.price_threshold_dollars;
-      }
-    }
 
-    const watchHtml = watchSet.size
-      ? [...watchSet].map(t => `<span class="key-ticker">${esc(t)}</span>`).join("")
-      : `<span class="key-desc">any ticker in watchlist</span>`;
+    // Prefer scanner_runtime (written by scanner each save) over inferring from alerts
+    const rt        = data && data.scanner_runtime ? data.scanner_runtime : null;
+    const watchList = rt ? (rt.watchlist || []) : [];
+    const kwList    = rt ? (rt.keywords  || []) : [];
+    const threshold = rt ? rt.price_threshold_dollars : null;
 
-    const kwHtml = kwSet.size
-      ? [...kwSet].map(k => `<span class="key-kw">${esc(k)}</span>`).join("")
-      : `<span class="key-desc">see config.json</span>`;
+    const watchHtml = watchList.length
+      ? watchList.map(t => `<span class="key-ticker">${esc(t)}</span>`).join("")
+      : `<span class="key-desc">none configured</span>`;
+
+    const kwHtml = kwList.length
+      ? kwList.map(k => `<span class="key-kw">${esc(k)}</span>`).join("")
+      : `<span class="key-desc">none configured</span>`;
 
     const threshHtml = threshold !== null
-      ? `<span class="key-val">≤ $${threshold.toFixed(2)}</span>`
+      ? `<span class="key-val">≤ $${parseFloat(threshold).toFixed(2)}</span>`
       : `<span class="key-desc">see config.json</span>`;
 
     el.innerHTML = `
