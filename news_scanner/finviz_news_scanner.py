@@ -128,6 +128,8 @@ MONTH_MAP = {
 def age_to_et(age_str):
     now = datetime.now()
     age = age_str.strip().lower()
+    if not age:
+        return ""   # blank — caller will show nothing rather than spaces
 
     # "Feb-21" — date only, no time (older articles after midnight rollover)
     match = re.match(r"([a-z]{3})-(\d{1,2})", age)
@@ -210,18 +212,28 @@ def parse_news_rows(html):
     if not news_table:
         return rows
 
+    last_age = ""   # carry forward — Finviz omits time on continuation rows
+
     for tr in news_table.find_all("tr"):
         tds = tr.find_all("td")
         if not tds:
             continue
 
+        # Time is ALWAYS in the first <td> on Finviz news rows.
+        # Only inspect that cell — never the headline/badge cells.
+        # Continuation rows (same timestamp, next ticker) have an empty first td
+        # so we carry the last known age forward.
         time_text = ""
-        for td in tds:
-            txt = td.get_text(strip=True)
-            if txt and ("-" in txt or ":" in txt or "am" in txt.lower() or "pm" in txt.lower()
-                        or "hour" in txt.lower() or "min" in txt.lower() or "day" in txt.lower()):
-                time_text = txt
-                break
+        if tds:
+            first_txt = tds[0].get_text(strip=True)
+            if first_txt and ("-" in first_txt or ":" in first_txt
+                    or "am" in first_txt.lower() or "pm" in first_txt.lower()
+                    or "hour" in first_txt.lower() or "min" in first_txt.lower()
+                    or "day" in first_txt.lower()):
+                time_text = first_txt
+                last_age  = first_txt          # remember for next continuation row
+            else:
+                time_text = last_age           # inherit from previous row
 
         headline = ""
         link_tag = tr.find("a", class_=lambda c: c and "nn-tab-link" in str(c))
