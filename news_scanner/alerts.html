@@ -17,7 +17,7 @@
       --card-new-bg:      rgba(255, 165, 0, 0.10);
       --card-new-border:  #ffa500;
       --card-new-glow:    0 0 0 3px rgba(255,165,0,0.20);
-      --accent:           #22c55e;
+      --accent:           #4ade80;   /* brighter green — readable on dark bg */
       --warning:          #ffa500;
       --link:             #60a5fa;
       --input-bg:         rgba(255,255,255,0.06);
@@ -48,7 +48,7 @@
       --high:    #ef4444;
       --watch:   #d946ef;
       --price:   #ffa500;
-      --keyword: #22c55e;
+      --keyword: #4ade80;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -244,8 +244,9 @@
     }
     .alerts-table thead th.sortable { cursor: pointer; }
     .alerts-table thead th.sortable:hover { color: var(--text); }
-    .sort-arr { margin-left: 4px; opacity: 0.4; }
-    .sort-arr.on { opacity: 1; color: var(--accent); }
+    .sort-arr { margin-left: 5px; opacity: 0.35; font-size: 11px; }
+    .sort-arr.on { opacity: 1; color: #facc15; font-weight: 900; font-size: 13px; }
+    th.sortable:hover .sort-arr { opacity: 0.75; }
     .alerts-table tbody tr {
       border-bottom: 1px solid var(--border);
       transition: background 0.15s;
@@ -269,7 +270,8 @@
     .td-badge  { min-width: 88px; }
     .td-ticker { font-weight: 800; font-size: 13px; min-width: 70px; }
     .td-price  { font-weight: 700; color: var(--warning); text-align: right; min-width: 68px; }
-    .td-hl     { max-width: 440px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .td-hl     { max-width: 440px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; position: relative; }
+    .td-hl:hover { overflow: visible; }
     .td-kw     { min-width: 100px; }
     .td-linked { color: var(--muted); font-size: 11px; min-width: 100px; }
     .td-src    { color: var(--muted); font-size: 11px; min-width: 80px; }
@@ -374,6 +376,42 @@
       .td-kw { display: none; }
       .td-time { min-width: 80px; font-size: 10px; }
     }
+    /* ── Key bar ─────────────────────────────────────────────────────────── */
+    .key-bar {
+      margin-top: 14px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--border);
+      border-radius: 0 0 8px 8px;
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      align-items: baseline;
+    }
+    .key-item { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+    .key-label {
+      font-weight: 800; font-size: 10px; letter-spacing: 0.05em;
+      padding: 2px 8px; border-radius: 999px;
+      border: 1px solid currentColor; white-space: nowrap;
+    }
+    .key-label.k-high    { color: var(--high); }
+    .key-label.k-watch   { color: var(--watch); }
+    .key-label.k-price   { color: var(--price); }
+    .key-label.k-keyword { color: var(--keyword); }
+    .key-desc { color: var(--muted); font-size: 10px; }
+    .key-val  { color: var(--text);  font-size: 10px; }
+    .key-ticker {
+      display: inline-block; font-size: 10px; padding: 1px 6px;
+      border-radius: 3px; border: 1px solid var(--watch);
+      color: var(--watch); margin-right: 3px;
+    }
+    .key-kw {
+      display: inline-block; font-size: 10px; padding: 1px 5px;
+      border-radius: 3px; background: rgba(74,222,128,0.08);
+      border: 1px solid rgba(74,222,128,0.25);
+      color: var(--keyword); margin-right: 3px; margin-bottom: 2px;
+    }
   </style>
 </head>
 <body>
@@ -446,6 +484,8 @@
     <span>Auto-refreshes every <span id="interval-label">30</span>s &nbsp;|&nbsp; Data from alerts_log.json</span>
     <span id="next-refresh-label"></span>
   </div>
+  <!-- Key bar -->
+  <div class="key-bar" id="key-bar"></div>
 
 </div>
 <script>
@@ -489,14 +529,23 @@
   }
 
   // ── Advanced filters popup ────────────────────────────────────────────────
+  function openPopup() {
+    document.getElementById("filters-popup").classList.add("open");
+    // Focus keyword input after transition paint
+    setTimeout(() => document.getElementById("adv-kw").focus(), 30);
+  }
+  function closePopup() {
+    document.getElementById("filters-popup").classList.remove("open");
+  }
   function togglePopup() {
-    document.getElementById("filters-popup").classList.toggle("open");
+    const isOpen = document.getElementById("filters-popup").classList.contains("open");
+    if (isOpen) closePopup(); else openPopup();
   }
   document.addEventListener("click", e => {
     const popup = document.getElementById("filters-popup");
     const btn   = document.getElementById("filters-btn");
     if (!popup.contains(e.target) && e.target !== btn)
-      popup.classList.remove("open");
+      closePopup();
   });
 
   function loadAdv() {
@@ -540,18 +589,30 @@
   }
 
   // ── Sort ──────────────────────────────────────────────────────────────────
+  // Cycle: default → asc → desc → default
+  let sortClicks = 0;
   function setSort(col) {
-    if (sortCol === col) sortDir *= -1;
-    else { sortCol = col; sortDir = 1; }
+    if (sortCol !== col) {
+      sortCol = col; sortDir = 1; sortClicks = 1;
+    } else {
+      sortClicks++;
+      if (sortClicks > 2) { sortCol = "default"; sortDir = 1; sortClicks = 0; }
+      else sortDir = sortClicks === 2 ? -1 : 1;
+    }
     renderTable(window._lastData);
   }
   function sortArr(col) {
     if (sortCol !== col) return `<span class="sort-arr">⇅</span>`;
-    return `<span class="sort-arr on">${sortDir === 1 ? "↑" : "↓"}</span>`;
+    return `<span class="sort-arr on">${sortDir === 1 ? "▲" : "▼"}</span>`;
   }
   function doSort(alerts) {
     if (sortCol === "default") return alerts;
     return [...alerts].sort((a, b) => {
+      if (sortCol === "time") {
+        // Sort by raw timestamp string — ISO format sorts lexicographically
+        const ta = a.timestamp || ""; const tb = b.timestamp || "";
+        return sortDir * ta.localeCompare(tb);
+      }
       if (sortCol === "ticker")   return sortDir * (a.ticker||"").localeCompare(b.ticker||"");
       if (sortCol === "priority") return sortDir * ((PRIORITY_RANK[a.priority]??99) - (PRIORITY_RANK[b.priority]??99));
       if (sortCol === "price")    return sortDir * ((parseFloat(a.price)||0) - (parseFloat(b.price)||0));
@@ -589,6 +650,7 @@
       if (data.generated)
         document.getElementById("generated-ts").textContent = "Last scan: " + data.generated;
       renderTable(data);
+      renderFooterKey(data);
     } catch(e) {
       document.getElementById("alerts-container").innerHTML =
         `<div class="state-msg">Could not load alerts_log.json<br><small>${e.message}</small><br><br>
@@ -643,11 +705,14 @@
       const linkedHtml = (a.linked_tickers || [])
         .map(t => `<span class="linked-ticker">${esc(t)}${rhLink(t)}</span>`).join("");
 
-      // Headline — tooltip shows full text, content is highlighted
+      // Headline — tooltip on the td (overflow:hidden on inner elements clips ::after)
       const hlDisp = hlText(a.headline, kw);
-      const hlCell = a.url
-        ? `<a href="${esc(a.url)}" target="_blank" rel="noopener" data-tip="${esc(a.headline)}">${hlDisp}</a>`
-        : `<span data-tip="${esc(a.headline)}">${hlDisp}</span>`;
+      const hlInner = a.url
+        ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">${hlDisp}</a>`
+        : hlDisp;
+      // data-tip goes on td via a data attribute we inject into the tr td later
+      const hlTip = esc(a.headline);
+      const hlCell = hlInner;
 
       // Time — strip trailing " ET" to save 3 chars
       const timeStr = (a.news_time || a.timestamp || "").replace(/ ET\s*$/, "");
@@ -662,7 +727,7 @@
         <td class="td-badge"><span class="badge badge-${a.priority}">${badgeTxt}</span></td>
         <td class="td-ticker">${tickerCell}</td>
         <td class="td-price">${priceDisp}</td>
-        <td class="td-hl">${hlCell}</td>
+        <td class="td-hl" data-tip="${hlTip}">${hlCell}</td>
         <td class="td-kw">${kwHtml}</td>
         <td class="td-linked">${linkedHtml}</td>
         <td class="td-src">${esc(a.source||"")}</td>
@@ -675,7 +740,7 @@
     document.getElementById("alerts-container").innerHTML = `
       <table class="alerts-table">
         <thead><tr>
-          <th>Time</th>
+          <th class="sortable" onclick="setSort('time')">Time ${sortArr("time")}</th>
           <th class="sortable" onclick="setSort('priority')">Priority ${sortArr("priority")}</th>
           <th class="sortable" onclick="setSort('ticker')">Ticker ${sortArr("ticker")}</th>
           <th class="sortable" onclick="setSort('price')">Price ${sortArr("price")}</th>
@@ -707,6 +772,63 @@
     return String(s||"")
       .replace(/&/g,"&amp;").replace(/</g,"&lt;")
       .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  // ── Footer key bar ───────────────────────────────────────────────────────
+  function renderFooterKey(data) {
+    const el = document.getElementById("key-bar");
+    if (!el) return;
+    // Pull watchlist + keywords + threshold from JSON meta if present
+    // Fall back to scanning the alert data for hints
+    const watchSet = new Set();
+    const kwSet    = new Set();
+    let   threshold = null;
+    if (data) {
+      (data.alerts || []).forEach(a => {
+        if (a.priority === "WATCH") watchSet.add(a.ticker);
+        (a.keywords || []).forEach(k => kwSet.add(k));
+        if (a.priority === "PRICE" || a.priority === "HIGH") {
+          const p = parseFloat(a.price);
+          if (!isNaN(p)) threshold = threshold === null ? p : Math.max(threshold, p);
+        }
+      });
+      if (data.config) {
+        (data.config.watchlist || []).forEach(t => watchSet.add(t));
+        (data.config.keywords  || []).forEach(k => kwSet.add(k));
+        if (data.config.price_threshold_dollars)
+          threshold = data.config.price_threshold_dollars;
+      }
+    }
+
+    const watchHtml = watchSet.size
+      ? [...watchSet].map(t => `<span class="key-ticker">${esc(t)}</span>`).join("")
+      : `<span class="key-desc">any ticker in watchlist</span>`;
+
+    const kwHtml = kwSet.size
+      ? [...kwSet].map(k => `<span class="key-kw">${esc(k)}</span>`).join("")
+      : `<span class="key-desc">see config.json</span>`;
+
+    const threshHtml = threshold !== null
+      ? `<span class="key-val">≤ $${threshold.toFixed(2)}</span>`
+      : `<span class="key-desc">see config.json</span>`;
+
+    el.innerHTML = `
+      <div class="key-item">
+        <span class="key-label k-high">HIGH ★</span>
+        <span class="key-desc">Price + keyword match</span>
+      </div>
+      <div class="key-item">
+        <span class="key-label k-watch">WATCH</span>
+        ${watchHtml}
+      </div>
+      <div class="key-item">
+        <span class="key-label k-price">PRICE ↑</span>
+        <span class="key-desc">Price</span> ${threshHtml}
+      </div>
+      <div class="key-item">
+        <span class="key-label k-keyword">KEYWORD</span>
+        ${kwHtml}
+      </div>`;
   }
 
   // ── Boot ──────────────────────────────────────────────────────────────────
