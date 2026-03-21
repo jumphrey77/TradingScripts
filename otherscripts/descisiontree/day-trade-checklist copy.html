@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Day Trade Pre-Entry Checklist</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0a0c0f;
+    --bg2: #111318;
+    --bg3: #181c23;
+    --border: #1e2430;
+    --border2: #2a3040;
+    --text: #c8d0e0;
+    --muted: #4a5568;
+    --green: #00e676;
+    --green-dim: rgba(0,230,118,0.1);
+    --red: #ff4444;
+    --red-dim: rgba(255,68,68,0.1);
+    --amber: #ffb300;
+    --amber-dim: rgba(255,179,0,0.1);
+    --blue: #4fc3f7;
+    --blue-dim: rgba(79,195,247,0.1);
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-head: 'Rajdhani', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.025) 2px, rgba(0,0,0,0.025) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+  .container { max-width: 980px; margin: 0 auto; }
+
+  .header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 22px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 {
+    font-family: var(--font-head);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #fff;
+    text-transform: uppercase;
+  }
+  .header .sub { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px; }
+  .clock { font-size: 11px; color: var(--muted); text-align: right; }
+  .clock #time-val { color: var(--green); font-size: 15px; display: block; }
+
+  /* Entry bar */
+  .entry-bar {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-end;
+  }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .field input, .field select {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    color: #fff;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .field input:focus, .field select:focus { border-color: var(--blue); }
+  .field.ticker input { font-size: 20px; font-weight: 700; letter-spacing: 0.1em; width: 110px; }
+  .field.price input { width: 120px; }
+  .field.context { flex: 1; }
+  .field.context input { width: 100%; font-size: 12px; color: var(--text); }
+
+  .analyze-btn {
+    padding: 10px 26px;
+    background: transparent;
+    border: 1px solid var(--green);
+    border-radius: 4px;
+    color: var(--green);
+    font-family: var(--font-head);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+    align-self: flex-end;
+  }
+  .analyze-btn:hover { background: var(--green-dim); }
+  .analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Status bar */
+  .status-bar { display: none; align-items: center; gap: 10px; background: var(--bg2); border: 1px solid var(--border); border-radius: 4px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; }
+  .status-bar.vis { display: flex; }
+  .step-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border2); transition: background 0.3s; }
+  .step-dot.active { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
+  .step-dot.done { background: var(--green); }
+  .step-lbl { font-size: 10px; letter-spacing: 0.08em; color: var(--muted); }
+  .step-lbl.active { color: var(--amber); }
+  .step-lbl.done { color: var(--green); }
+  .step-sep { color: var(--border2); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* 3-col grid */
+  .main-grid { display: none; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .main-grid.vis { display: grid; }
+
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+  .panel-head { background: var(--bg3); border-bottom: 1px solid var(--border); padding: 8px 12px; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+  .panel-head .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .panel-body { padding: 12px; }
+
+  .check-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--border); }
+  .check-item:last-child { border-bottom: none; }
+  .check-icon { width: 18px; height: 18px; border-radius: 2px; flex-shrink: 0; margin-top: 1px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+  .check-icon.pass { background: var(--green-dim); border: 1px solid var(--green); color: var(--green); }
+  .check-icon.fail { background: var(--red-dim); border: 1px solid var(--red); color: var(--red); }
+  .check-icon.warn { background: var(--amber-dim); border: 1px solid var(--amber); color: var(--amber); }
+  .check-icon.pending { background: var(--bg3); border: 1px solid var(--border2); color: var(--muted); animation: pulse 1.2s ease-in-out infinite; }
+  .check-content { flex: 1; min-width: 0; }
+  .check-label { font-size: 12px; line-height: 1.4; }
+  .check-label.pass { color: var(--text); }
+  .check-label.fail { color: #ffaaaa; }
+  .check-label.warn { color: #ffe082; }
+  .check-label.pending { color: var(--muted); font-style: italic; }
+  .check-finding { font-size: 10px; margin-top: 2px; line-height: 1.4; }
+  .check-finding.pass { color: #52d68a; }
+  .check-finding.fail { color: #ff7070; }
+  .check-finding.warn { color: #ffd040; }
+  .check-finding.pending { color: var(--muted); }
+
+  /* Score row */
+  .score-row { display: none; gap: 12px; margin-bottom: 12px; }
+  .score-row.vis { display: flex; }
+  .score-main { background: var(--bg2); border: 1px solid var(--border); border-radius: 5px; padding: 14px 18px; display: flex; align-items: center; gap: 20px; flex: 2; }
+  .score-num { font-family: var(--font-head); font-size: 52px; font-weight: 700; line-height: 1; min-width: 70px; }
+  .score-meta { flex: 1; }
+  .score-meta .verdict-word { font-family: var(--font-head); font-size: 22px; font-weight: 700; letter-spacing: 0.06em; }
+  .score-lbl { font-size: 9px; letter-spacing: 0.12em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+  .bar-track { height: 5px; background: var(--bg3); border-radius: 3px; overflow: hidden; margin: 6px 0 3px; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease, background 0.6s ease; }
+  .bar-labs { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted); }
+  .rr-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 5px; padding: 14px 16px; flex: 1; }
+  .rr-title { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .rr-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .rr-stat { text-align: center; }
+  .rr-stat .val { font-family: var(--font-head); font-size: 20px; font-weight: 700; }
+  .rr-stat .lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+
+  /* Entry/Exit grid */
+  .ee-grid { display: none; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .ee-grid.vis { display: grid; }
+  .ee-card { border-radius: 5px; border: 1px solid; padding: 14px 16px; }
+  .ee-card.entry { border-color: var(--green); background: var(--green-dim); }
+  .ee-card.exit  { border-color: var(--red);   background: var(--red-dim); }
+  .ee-card.stop  { border-color: var(--amber);  background: var(--amber-dim); }
+  .ee-lbl { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 5px; }
+  .ee-card.entry .ee-lbl { color: var(--green); }
+  .ee-card.exit  .ee-lbl { color: var(--red); }
+  .ee-card.stop  .ee-lbl { color: var(--amber); }
+  .ee-price { font-family: var(--font-head); font-size: 26px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+  .ee-card.entry .ee-price { color: var(--green); }
+  .ee-card.exit  .ee-price { color: var(--red); }
+  .ee-card.stop  .ee-price { color: var(--amber); }
+  .ee-sub { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .ee-trigger { font-size: 10px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.07); color: var(--text); line-height: 1.5; }
+
+  /* Verdict */
+  .verdict-panel { display: none; background: var(--bg2); border-radius: 5px; overflow: hidden; margin-bottom: 12px; border: 1px solid var(--border); }
+  .verdict-panel.vis { display: block; }
+  .verdict-head { padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-family: var(--font-head); font-size: 17px; font-weight: 700; letter-spacing: 0.06em; }
+  .verdict-body { padding: 14px 16px; font-size: 12px; line-height: 1.8; color: var(--text); }
+  .verdict-body strong { color: #fff; font-weight: 500; }
+
+  /* Tape section */
+  .tape-section { display: none; background: var(--bg2); border: 1px solid var(--border); border-radius: 5px; margin-bottom: 12px; overflow: hidden; }
+  .tape-section.vis { display: block; }
+  .tape-head { background: var(--bg3); border-bottom: 1px solid var(--border); padding: 9px 14px; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .tape-body { padding: 14px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+  .tape-field { display: flex; flex-direction: column; gap: 5px; }
+  .tape-field label { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .tape-toggle { display: flex; gap: 4px; }
+  .tape-btn { padding: 5px 11px; border-radius: 2px; border: 1px solid var(--border2); background: transparent; color: var(--muted); font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: all 0.15s; }
+  .tape-btn:hover { color: var(--text); }
+  .tape-btn.g { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+  .tape-btn.r { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+  .tape-btn.a { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+
+  .refresh-btn { margin-left: auto; padding: 6px 16px; background: transparent; border: 1px solid var(--blue); border-radius: 3px; color: var(--blue); font-family: var(--font-head); font-size: 13px; font-weight: 600; letter-spacing: 0.08em; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .refresh-btn:hover { background: var(--blue-dim); }
+  .refresh-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .disclaimer { font-size: 10px; color: var(--muted); text-align: center; padding: 14px; border-top: 1px solid var(--border); margin-top: 8px; line-height: 1.6; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div>
+      <h1>⬡ Trade Entry Checklist</h1>
+      <div class="sub">Enter ticker · AI evaluates the setup · You observe the tape</div>
+    </div>
+    <div class="clock">
+      <span id="time-val">--:--:--</span>
+      <div id="mkt-status" style="font-size:10px;margin-top:3px;color:var(--muted)">--</div>
+    </div>
+  </div>
+
+  <!-- Just 3 inputs -->
+  <div class="entry-bar">
+    <div class="field ticker">
+      <label>Ticker</label>
+      <input id="ticker" type="text" placeholder="HCWB" maxlength="6" oninput="this.value=this.value.toUpperCase()">
+    </div>
+    <div class="field price">
+      <label>Current Price ($)</label>
+      <input id="cur-price" type="number" step="0.001" placeholder="0.000">
+    </div>
+    <div class="field context">
+      <label>Optional context (e.g. "up 56% pre-market on CAR-T news")</label>
+      <input id="context" type="text" placeholder="Leave blank — AI will research on its own">
+    </div>
+    <button class="analyze-btn" id="analyze-btn" onclick="runAnalysis()">▶ &nbsp;Analyze</button>
+  </div>
+
+  <!-- Steps -->
+  <div class="status-bar" id="status-bar">
+    <div class="step-dot" id="dot-1"></div><span class="step-lbl" id="lbl-1">Researching ticker</span>
+    <span class="step-sep">›</span>
+    <div class="step-dot" id="dot-2"></div><span class="step-lbl" id="lbl-2">Technical analysis</span>
+    <span class="step-sep">›</span>
+    <div class="step-dot" id="dot-3"></div><span class="step-lbl" id="lbl-3">Calculating levels</span>
+    <span class="step-sep">›</span>
+    <div class="step-dot" id="dot-4"></div><span class="step-lbl" id="lbl-4">Building verdict</span>
+  </div>
+  <!-- Live activity line -->
+  <div id="activity-line" style="display:none; font-size:11px; color:var(--muted); font-family:var(--font-mono); padding:6px 14px 10px; letter-spacing:0.04em;">
+    <span id="activity-cursor" style="color:var(--green); margin-right:6px;">›</span><span id="activity-text"></span><span id="activity-blink" style="animation: pulse 0.8s ease-in-out infinite; display:inline-block; margin-left:2px; color:var(--green);">▋</span>
+  </div>
+
+  <!-- AI-populated checklists -->
+  <div class="main-grid" id="main-grid">
+    <div class="panel">
+      <div class="panel-head"><div class="dot" style="background:var(--blue)"></div>Catalyst & Setup</div>
+      <div class="panel-body" id="col-catalyst"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="dot" style="background:var(--amber)"></div>Technical Indicators</div>
+      <div class="panel-body" id="col-tech"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div class="dot" style="background:var(--red)"></div>Risk Factors</div>
+      <div class="panel-body" id="col-risk"></div>
+    </div>
+  </div>
+
+  <!-- Score + R/R -->
+  <div class="score-row" id="score-row">
+    <div class="score-main">
+      <div class="score-num" id="score-num" style="color:var(--muted)">—</div>
+      <div class="score-meta">
+        <div class="score-lbl">Trade readiness</div>
+        <div class="verdict-word" id="verdict-word" style="color:var(--muted)">—</div>
+        <div class="bar-track"><div class="bar-fill" id="score-bar" style="width:0%;background:var(--muted)"></div></div>
+        <div class="bar-labs"><span>AVOID</span><span>CAUTION</span><span>READY</span></div>
+      </div>
+    </div>
+    <div class="rr-card">
+      <div class="rr-title">Risk / Reward Summary</div>
+      <div class="rr-stats" id="rr-stats">
+        <div class="rr-stat"><div class="val" style="color:var(--muted)">—</div><div class="lbl">R:R Ratio</div></div>
+        <div class="rr-stat"><div class="val" style="color:var(--muted)">—</div><div class="lbl">Upside T1</div></div>
+        <div class="rr-stat"><div class="val" style="color:var(--muted)">—</div><div class="lbl">Stop %</div></div>
+        <div class="rr-stat"><div class="val" style="color:var(--muted)">—</div><div class="lbl">Float</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Entry / Exit / Stop -->
+  <div class="ee-grid" id="ee-grid">
+    <div class="ee-card entry">
+      <div class="ee-lbl">Ideal Entry Zone</div>
+      <div class="ee-price" id="ee-entry">—</div>
+      <div class="ee-sub" id="ee-entry-sub"></div>
+      <div class="ee-trigger" id="ee-entry-trigger"></div>
+    </div>
+    <div class="ee-card exit">
+      <div class="ee-lbl">Target Exit</div>
+      <div class="ee-price" id="ee-exit">—</div>
+      <div class="ee-sub" id="ee-exit-sub"></div>
+      <div class="ee-trigger" id="ee-exit-trigger"></div>
+    </div>
+    <div class="ee-card stop">
+      <div class="ee-lbl">Stop Loss</div>
+      <div class="ee-price" id="ee-stop">—</div>
+      <div class="ee-sub" id="ee-stop-sub"></div>
+      <div class="ee-trigger" id="ee-stop-trigger"></div>
+    </div>
+  </div>
+
+  <!-- Verdict narrative -->
+  <div class="verdict-panel" id="verdict-panel">
+    <div class="verdict-head" id="verdict-head">
+      <span id="verdict-icon">◆</span>
+      <span id="verdict-title">—</span>
+    </div>
+    <div class="verdict-body" id="verdict-body"></div>
+  </div>
+
+  <!-- Only 3 manual observations -->
+  <div class="tape-section" id="tape-section">
+    <div class="tape-head">
+      <div style="width:6px;height:6px;border-radius:50%;background:var(--amber)"></div>
+      Your Live Level 2 Observations — 3 things only
+      <button class="refresh-btn" id="refresh-btn" onclick="refreshWithTape()">↻ &nbsp;Re-evaluate with tape data</button>
+    </div>
+    <div class="tape-body">
+      <div class="tape-field">
+        <label>Tape color</label>
+        <div class="tape-toggle">
+          <button class="tape-btn" onclick="setTape(this,'color','green')" data-g="color">GREEN (buys)</button>
+          <button class="tape-btn" onclick="setTape(this,'color','mixed')" data-g="color">MIXED</button>
+          <button class="tape-btn" onclick="setTape(this,'color','red')" data-g="color">RED (sells)</button>
+        </div>
+      </div>
+      <div class="tape-field">
+        <label>Tape speed</label>
+        <div class="tape-toggle">
+          <button class="tape-btn" onclick="setTape(this,'speed','fast')" data-g="speed">FAST</button>
+          <button class="tape-btn" onclick="setTape(this,'speed','medium')" data-g="speed">MEDIUM</button>
+          <button class="tape-btn" onclick="setTape(this,'speed','slow')" data-g="speed">SLOW</button>
+        </div>
+      </div>
+      <div class="tape-field">
+        <label>Depth chart</label>
+        <div class="tape-toggle">
+          <button class="tape-btn" onclick="setTape(this,'depth','bids_heavy')" data-g="depth">BIDS HEAVY</button>
+          <button class="tape-btn" onclick="setTape(this,'depth','balanced')" data-g="depth">BALANCED</button>
+          <button class="tape-btn" onclick="setTape(this,'depth','asks_heavy')" data-g="depth">ASKS HEAVY</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    ⚠ Educational and decision-support tool only. Not financial advice. Day trading involves substantial risk of loss. Always use defined risk management. Consult a financial professional.
+  </div>
+</div>
+
+<script>
+// Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById('time-val').textContent =
+    String(now.getHours()).padStart(2,'0')+':'+
+    String(now.getMinutes()).padStart(2,'0')+':'+
+    String(now.getSeconds()).padStart(2,'0');
+  const d = now.getDay(), t = now.getHours()*60+now.getMinutes();
+  const el = document.getElementById('mkt-status');
+  if (d===0||d===6) { el.textContent='WEEKEND'; el.style.color='var(--muted)'; }
+  else if (t>=240&&t<570) { el.textContent='● PRE-MARKET'; el.style.color='var(--amber)'; }
+  else if (t>=570&&t<960) { el.textContent='● MARKET OPEN'; el.style.color='var(--green)'; }
+  else if (t>=960&&t<1200) { el.textContent='AFTER-HOURS'; el.style.color='var(--blue)'; }
+  else { el.textContent='MARKET CLOSED'; el.style.color='var(--muted)'; }
+}
+setInterval(updateClock,1000); updateClock();
+
+// Tape
+const tape = {};
+function setTape(btn, group, val) {
+  document.querySelectorAll(`[data-g="${group}"]`).forEach(b => b.className='tape-btn');
+  tape[group] = val;
+  const greens = ['green','fast','bids_heavy'];
+  const reds = ['red','slow','asks_heavy'];
+  btn.classList.add(greens.includes(val)?'g':reds.includes(val)?'r':'a');
+}
+
+// Step helpers
+function stepSet(n, state) {
+  const d = document.getElementById('dot-'+n);
+  const l = document.getElementById('lbl-'+n);
+  d.className = 'step-dot'+(state==='active'?' active':state==='done'?' done':'');
+  l.className = 'step-lbl'+(state==='active'?' active':state==='done'?' done':'');
+}
+
+function loadingHTML(n) {
+  return Array(n).fill(0).map(()=>`
+    <div class="check-item">
+      <div class="check-icon pending">·</div>
+      <div class="check-content"><div class="check-label pending">Analyzing...</div><div class="check-finding pending">AI is researching this ticker</div></div>
+    </div>`).join('');
+}
+
+let lastData = null;
+
+function setActivity(msg) {
+  const line = document.getElementById('activity-line');
+  const txt  = document.getElementById('activity-text');
+  if (msg === null) { line.style.display = 'none'; return; }
+  line.style.display = 'block';
+  txt.textContent = msg;
+}
+
+async function runAnalysis() {
+  const ticker = document.getElementById('ticker').value.trim().toUpperCase();
+  const price = document.getElementById('cur-price').value;
+  const ctx = document.getElementById('context').value.trim();
+  if (!ticker) { alert('Enter a ticker.'); return; }
+
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true; btn.textContent = '... Working';
+
+  // Show UI skeleton first
+  document.getElementById('status-bar').className = 'status-bar vis';
+  [1,2,3,4].forEach(n => stepSet(n,'pending'));
+  stepSet(1,'active');
+  setActivity('Scanning ' + ticker + ' — pulling catalyst data, float, short interest...');
+
+  document.getElementById('main-grid').className = 'main-grid vis';
+  ['col-catalyst','col-tech','col-risk'].forEach(id => {
+    document.getElementById(id).innerHTML = loadingHTML(5);
+  });
+  document.getElementById('score-row').className = 'score-row';
+  document.getElementById('ee-grid').className = 'ee-grid';
+  document.getElementById('verdict-panel').className = 'verdict-panel';
+  document.getElementById('tape-section').className = 'tape-section';
+
+  // Let the browser paint the skeleton before the fetch blocks the thread
+  await delay(80);
+
+  try {
+    setActivity('Connecting to AI — sending ' + ticker + ' setup for full analysis...');
+    await delay(60);
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: buildPrompt(ticker, price, ctx, null) }]
+      })
+    });
+
+    stepSet(1,'done'); stepSet(2,'active');
+    setActivity('Evaluating catalyst strength, volume profile, tape dominance for ' + ticker + '...');
+
+    const data = await response.json();
+    const text = data.content?.map(b=>b.text||'').join('') || '';
+
+    stepSet(2,'done'); stepSet(3,'active');
+    setActivity('Calculating key levels — support, resistance, entry zone, stop loss...');
+    await delay(200);
+
+    stepSet(3,'done'); stepSet(4,'active');
+    setActivity('Building verdict — scoring setup and finalizing risk/reward ratio...');
+    await delay(150);
+
+    lastData = parseJSON(text);
+    render(lastData, ticker, price);
+
+    stepSet(4,'done');
+    setActivity(null);
+    document.getElementById('tape-section').className = 'tape-section vis';
+
+  } catch(err) {
+    setActivity('Connection error — check network and try again.');
+    ['col-catalyst','col-tech','col-risk'].forEach(id => {
+      document.getElementById(id).innerHTML =
+        `<div style="color:var(--red);font-size:12px;padding:10px">⚠ ${err.message}</div>`;
+    });
+  }
+
+  btn.disabled = false; btn.textContent = '▶  Analyze';
+}
+
+async function refreshWithTape() {
+  if (!lastData) return;
+  const ticker = document.getElementById('ticker').value.trim().toUpperCase();
+  const price = document.getElementById('cur-price').value;
+  const ctx = document.getElementById('context').value.trim();
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true; btn.textContent = '...';
+
+  const tapeStr = Object.entries(tape).map(([k,v])=>`${k}: ${v}`).join(', ') || 'not provided';
+  setActivity('Re-evaluating ' + ticker + ' with live tape observations — ' + tapeStr + '...');
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: buildPrompt(ticker, price, ctx, tapeStr) }]
+      })
+    });
+    setActivity('Updating entry, exit, and stop levels to reflect tape data...');
+    const data = await response.json();
+    const text = data.content?.map(b=>b.text||'').join('') || '';
+    lastData = parseJSON(text);
+    render(lastData, ticker, price);
+    setActivity(null);
+  } catch(e) {
+    setActivity('Connection error — try again.');
+  }
+
+  btn.disabled = false; btn.textContent = '↻  Re-evaluate with tape data';
+}
+
+function buildPrompt(ticker, price, ctx, tapeObs) {
+  return `You are an expert day trader coach. Evaluate ${ticker} as a day trade right now.
+Current price: ${price ? '$'+price : 'unknown'}.
+${ctx ? 'Trader notes: '+ctx : 'No notes — use your training knowledge of this ticker and typical patterns for this type of stock.'}
+${tapeObs ? '\nLIVE TAPE DATA from trader\'s Robinhood Level 2:\n'+tapeObs+'\nUpdate your entry/exit/stop and verdict to reflect what the tape is showing.' : ''}
+
+Respond ONLY with a valid JSON object. No markdown, no code fences, no text outside the JSON.
+
+{
+  "catalyst": {
+    "items": [
+      { "label": "Clear named catalyst exists", "status": "pass|fail|warn", "finding": "one specific sentence about this ticker" },
+      { "label": "Catalyst is fresh (under 24h)", "status": "pass|fail|warn", "finding": "..." },
+      { "label": "Pre-market volume spike", "status": "pass|fail|warn", "finding": "..." },
+      { "label": "Ask lifts dominating tape", "status": "pass|fail|warn", "finding": "..." },
+      { "label": "News credibility / source quality", "status": "pass|fail|warn", "finding": "..." }
+    ]
+  },
+  "technical": {
+    "items": [
+      { "label": "RSI reading", "status": "pass|fail|warn", "finding": "include estimated RSI value and what it means" },
+      { "label": "MACD signal (daily)", "status": "pass|fail|warn", "finding": "..." },
+      { "label": "Price vs VWAP", "status": "pass|fail|warn", "finding": "..." },
+      { "label": "Key moving averages", "status": "pass|fail|warn", "finding": "include 50d and 200d MA levels if known" },
+      { "label": "Price action pattern", "status": "pass|fail|warn", "finding": "consolidating, flag, parabolic, etc." }
+    ]
+  },
+  "risk": {
+    "items": [
+      { "label": "Dilution / offering risk", "status": "pass|fail|warn", "finding": "..." },
+      { "label": "Float size", "status": "pass|fail|warn", "finding": "include actual float number" },
+      { "label": "Overhead MA resistance", "status": "pass|fail|warn", "finding": "..." },
+      { "label": "Balance sheet / cash burn", "status": "pass|fail|warn", "finding": "..." },
+      { "label": "Short interest", "status": "pass|fail|warn", "finding": "include % short float if known" }
+    ]
+  },
+  "levels": {
+    "entry": { "price": number, "note": "why this entry", "trigger": "what tape signal to wait for before entering" },
+    "target1": { "price": number, "note": "why this target", "pct": number },
+    "target2": { "price": number, "note": "extended target if momentum holds", "pct": number },
+    "stop": { "price": number, "note": "why this stop level", "trigger": "what on the tape confirms you exit" }
+  },
+  "score": number,
+  "maxScore": 10,
+  "verdict": "STRONG BUY|BUY|WAIT|AVOID",
+  "verdictReason": "single most important factor — one sentence",
+  "narrative": "3-4 sentences: quality of the setup, main opportunity, main risk, and what to monitor. Specific to this ticker.",
+  "float": "e.g. 4.7M shares",
+  "rrRatio": "e.g. 1:2.4"
+}`;
+}
+
+function parseJSON(text) {
+  try { return JSON.parse(text.replace(/```json|```/g,'').trim()); }
+  catch(e) {
+    const m = text.match(/\{[\s\S]*\}/);
+    if (m) try { return JSON.parse(m[0]); } catch(e2) {}
+    return null;
+  }
+}
+
+function renderItems(id, items) {
+  const icons = { pass:'✓', fail:'✕', warn:'!' };
+  document.getElementById(id).innerHTML = items.map(item=>`
+    <div class="check-item">
+      <div class="check-icon ${item.status}">${icons[item.status]||'·'}</div>
+      <div class="check-content">
+        <div class="check-label ${item.status}">${item.label}</div>
+        <div class="check-finding ${item.status}">${item.finding}</div>
+      </div>
+    </div>`).join('');
+}
+
+function render(data, ticker, price) {
+  if (!data) {
+    document.getElementById('col-catalyst').innerHTML =
+      '<div style="color:var(--red);padding:10px;font-size:12px">Could not parse response. Try again.</div>';
+    return;
+  }
+
+  if (data.catalyst?.items) renderItems('col-catalyst', data.catalyst.items);
+  if (data.technical?.items) renderItems('col-tech', data.technical.items);
+  if (data.risk?.items) renderItems('col-risk', data.risk.items);
+
+  // Score
+  const score = data.score ?? 5;
+  const max = data.maxScore ?? 10;
+  const pct = Math.max(0,Math.min(100,(score/max)*100));
+  let color, word;
+  if (score<=2){color='var(--red)';word='AVOID';}
+  else if (score<=5){color='var(--amber)';word='CAUTION';}
+  else if (score<=7){color='var(--blue)';word='MONITOR';}
+  else {color='var(--green)';word='READY';}
+
+  document.getElementById('score-num').textContent = score;
+  document.getElementById('score-num').style.color = color;
+  document.getElementById('verdict-word').textContent = word;
+  document.getElementById('verdict-word').style.color = color;
+  document.getElementById('score-bar').style.width = pct+'%';
+  document.getElementById('score-bar').style.background = color;
+  document.getElementById('score-row').className = 'score-row vis';
+
+  // R/R
+  const l = data.levels || {};
+  const ep = l.entry?.price, sp = l.stop?.price, t1p = l.target1?.price;
+  if (ep && sp && t1p) {
+    const risk = Math.abs(ep-sp), reward = Math.abs(t1p-ep);
+    const rr = risk>0 ? (reward/risk).toFixed(1) : '—';
+    const rrColor = parseFloat(rr)>=2?'var(--green)':parseFloat(rr)>=1?'var(--amber)':'var(--red)';
+    document.getElementById('rr-stats').innerHTML = `
+      <div class="rr-stat"><div class="val" style="color:${rrColor}">1:${rr}</div><div class="lbl">R:R Ratio</div></div>
+      <div class="rr-stat"><div class="val" style="color:var(--green)">+${ep>0?((reward/ep)*100).toFixed(1):0}%</div><div class="lbl">Upside T1</div></div>
+      <div class="rr-stat"><div class="val" style="color:var(--red)">-${ep>0?((risk/ep)*100).toFixed(1):0}%</div><div class="lbl">Stop %</div></div>
+      <div class="rr-stat"><div class="val" style="color:var(--blue);font-size:15px">${data.float||'—'}</div><div class="lbl">Float</div></div>`;
+  }
+
+  // Entry/exit cards
+  if (l.entry) {
+    document.getElementById('ee-entry').textContent = ep ? '$'+ep.toFixed(3) : '—';
+    document.getElementById('ee-entry-sub').textContent = l.entry.note || '';
+    document.getElementById('ee-entry-trigger').textContent = '⟶ Wait for: '+(l.entry.trigger||'—');
+  }
+  if (l.target1) {
+    const t2note = l.target2?.price ? ` · T2: $${l.target2.price.toFixed(2)}` : '';
+    document.getElementById('ee-exit').textContent = t1p ? '$'+t1p.toFixed(2) : '—';
+    document.getElementById('ee-exit-sub').textContent = (l.target1.note||'')+t2note;
+    document.getElementById('ee-exit-trigger').textContent = '⟶ '+(l.target2?.note||'Consider partial exit at T1, full at T2');
+  }
+  if (l.stop) {
+    document.getElementById('ee-stop').textContent = sp ? '$'+sp.toFixed(3) : '—';
+    document.getElementById('ee-stop-sub').textContent = l.stop.note || '';
+    document.getElementById('ee-stop-trigger').textContent = '⟶ Exit if: '+(l.stop.trigger||'—');
+  }
+  document.getElementById('ee-grid').className = 'ee-grid vis';
+
+  // Verdict panel
+  const vColors = {'STRONG BUY':'var(--green)','BUY':'#52d68a','WAIT':'var(--amber)','AVOID':'var(--red)'};
+  const vIcons  = {'STRONG BUY':'▲','BUY':'▲','WAIT':'◆','AVOID':'▼'};
+  const vc = vColors[data.verdict]||'var(--muted)';
+  const vh = document.getElementById('verdict-head');
+  vh.style.background = `linear-gradient(90deg, ${vc}20, var(--bg3))`;
+  vh.style.borderBottom = `1px solid ${vc}40`;
+  document.getElementById('verdict-icon').textContent = vIcons[data.verdict]||'◆';
+  document.getElementById('verdict-icon').style.color = vc;
+  document.getElementById('verdict-title').textContent = `${ticker} · ${data.verdict||'—'}${data.verdictReason?' — '+data.verdictReason:''}`;
+  document.getElementById('verdict-title').style.color = vc;
+  document.getElementById('verdict-body').innerHTML = (data.narrative||'').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+  document.getElementById('verdict-panel').className = 'verdict-panel vis';
+}
+
+function delay(ms) { return new Promise(r=>setTimeout(r,ms)); }
+</script>
+</body>
+</html>

@@ -1,3 +1,12 @@
 jumphrey77@gmail.com
 GameKings789#
 1123$1234
+
+Alpaca Lost Key: dc520d6d-0181-4a15-b95e-245fc38f3936
+
+Key:        PKLW7WK6WNW3OXVESHSOCUK4M6
+Secret:     Em2cUYZzUPWL4xMX9kLxYvUhCCwBraBCe1r7gPW5zaqQ
+EndPoint:   https://paper-api.alpaca.markets/v2
+
+Key For Trade Entry Checklist
+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

@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Day Trade Pre-Entry Checklist</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #0a0c0f;
+    --bg2: #111318;
+    --bg3: #181c23;
+    --border: #1e2430;
+    --border2: #2a3040;
+    --text: #c8d0e0;
+    --muted: #4a5568;
+    --green: #00e676;
+    --green-dim: #00e67622;
+    --red: #ff4444;
+    --red-dim: #ff444422;
+    --amber: #ffb300;
+    --amber-dim: #ffb30022;
+    --blue: #4fc3f7;
+    --blue-dim: #4fc3f722;
+    --accent: #00e676;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-head: 'Rajdhani', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  .container { max-width: 960px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header-left h1 {
+    font-family: var(--font-head);
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #fff;
+    text-transform: uppercase;
+  }
+  .header-left .sub {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .clock {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-align: right;
+  }
+  .clock span { color: var(--green); font-size: 14px; }
+
+  /* Ticker input bar */
+  .ticker-bar {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin-bottom: 20px;
+    display: grid;
+    grid-template-columns: 140px 1fr 1fr 1fr 1fr auto;
+    gap: 12px;
+    align-items: end;
+  }
+  .field label {
+    display: block;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  .field input, .field select {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 7px 10px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .field input:focus, .field select:focus { border-color: var(--blue); }
+  .field input::placeholder { color: var(--muted); }
+  .field select option { background: var(--bg3); }
+
+  .ticker-input-big {
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    color: #fff !important;
+    letter-spacing: 0.06em;
+  }
+
+  /* 3-column grid */
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .panel-head {
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 12px;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .panel-head .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+  .panel-body { padding: 12px; }
+
+  /* Checklist items */
+  .check-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+    border-radius: 2px;
+    padding-left: 4px;
+  }
+  .check-item:last-child { border-bottom: none; }
+  .check-item:hover { background: rgba(255,255,255,0.02); }
+
+  .check-box {
+    width: 16px; height: 16px;
+    border: 1px solid var(--border2);
+    border-radius: 2px;
+    flex-shrink: 0;
+    margin-top: 1px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+    cursor: pointer;
+  }
+  .check-item.checked .check-box {
+    background: var(--green);
+    border-color: var(--green);
+  }
+  .check-item.checked .check-box::after {
+    content: '';
+    width: 9px; height: 5px;
+    border-left: 2px solid #000;
+    border-bottom: 2px solid #000;
+    transform: rotate(-45deg) translateY(-1px);
+    display: block;
+  }
+  .check-item.red-check.checked .check-box { background: var(--red); border-color: var(--red); }
+  .check-item.amber-check.checked .check-box { background: var(--amber); border-color: var(--amber); }
+
+  .check-label { font-size: 12px; color: var(--text); line-height: 1.4; flex: 1; }
+  .check-item.checked .check-label { color: var(--muted); text-decoration: line-through; }
+  .check-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  /* Score bar */
+  .score-panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .score-num {
+    font-family: var(--font-head);
+    font-size: 48px;
+    font-weight: 700;
+    min-width: 80px;
+    line-height: 1;
+  }
+  .score-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .score-verdict { font-family: var(--font-head); font-size: 20px; font-weight: 600; letter-spacing: 0.06em; }
+  .bar-wrap { flex: 1; }
+  .bar-track {
+    height: 6px;
+    background: var(--bg3);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease, background 0.5s ease;
+  }
+  .bar-labels { display: flex; justify-content: space-between; font-size: 9px; color: var(--muted); letter-spacing: 0.08em; }
+
+  /* Level inputs */
+  .level-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .level-row { display: flex; flex-direction: column; gap: 3px; }
+  .level-row label { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .level-row input {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 6px 8px;
+    width: 100%;
+    outline: none;
+  }
+  .level-row input:focus { border-color: var(--blue); }
+  .level-row.resist input { border-left: 2px solid var(--red); }
+  .level-row.support input { border-left: 2px solid var(--green); }
+  .level-row.target input { border-left: 2px solid var(--amber); }
+
+  /* Tape inputs */
+  .tape-row-input { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .tape-row-input label { font-size: 9px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; min-width: 80px; }
+  .tape-toggle { display: flex; gap: 4px; }
+  .tape-btn {
+    padding: 4px 10px;
+    border-radius: 2px;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .tape-btn.active-green { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+  .tape-btn.active-red { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+  .tape-btn.active-amber { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+
+  /* AI output */
+  .ai-panel {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+  .ai-head {
+    background: linear-gradient(90deg, #0d1f15, var(--bg3));
+    border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--green);
+  }
+  .ai-pulse {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+
+  .ai-body {
+    padding: 16px;
+    min-height: 120px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+  .ai-body.loading { color: var(--muted); font-style: italic; }
+  .ai-thinking {
+    display: inline-flex;
+    gap: 3px;
+    align-items: center;
+  }
+  .ai-thinking span {
+    width: 4px; height: 4px; border-radius: 50%;
+    background: var(--green);
+    animation: blink 1.2s ease-in-out infinite;
+  }
+  .ai-thinking span:nth-child(2) { animation-delay: 0.2s; }
+  .ai-thinking span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
+
+  /* Entry/Exit output */
+  .entry-exit-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .ee-card {
+    padding: 10px 12px;
+    border-radius: 3px;
+    border: 1px solid;
+  }
+  .ee-card.entry { border-color: var(--green); background: var(--green-dim); }
+  .ee-card.exit { border-color: var(--red); background: var(--red-dim); }
+  .ee-card.stop { border-color: var(--amber); background: var(--amber-dim); }
+  .ee-card .ee-label { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 4px; }
+  .ee-card.entry .ee-label { color: var(--green); }
+  .ee-card.exit .ee-label { color: var(--red); }
+  .ee-card.stop .ee-label { color: var(--amber); }
+  .ee-card .ee-price { font-family: var(--font-head); font-size: 22px; font-weight: 700; }
+  .ee-card.entry .ee-price { color: var(--green); }
+  .ee-card.exit .ee-price { color: var(--red); }
+  .ee-card.stop .ee-price { color: var(--amber); }
+  .ee-card .ee-note { font-size: 10px; color: var(--muted); margin-top: 3px; line-height: 1.4; }
+
+  /* Evaluate button */
+  .eval-btn {
+    width: 100%;
+    padding: 14px;
+    background: transparent;
+    border: 1px solid var(--green);
+    border-radius: 4px;
+    color: var(--green);
+    font-family: var(--font-head);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .eval-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--green);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .eval-btn:hover::before { opacity: 0.08; }
+  .eval-btn:active { transform: scale(0.99); }
+  .eval-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Risk/reward calculator */
+  .rr-display {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .rr-stat {
+    flex: 1;
+    background: var(--bg3);
+    border-radius: 3px;
+    padding: 8px 10px;
+    text-align: center;
+  }
+  .rr-stat .rr-val { font-family: var(--font-head); font-size: 18px; font-weight: 700; }
+  .rr-stat .rr-lbl { font-size: 9px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px; }
+
+  /* Tag badges */
+  .tag {
+    display: inline-block;
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-left: 6px;
+  }
+  .tag-green { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+  .tag-red { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
+  .tag-amber { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber); }
+  .tag-blue { background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue); }
+
+  /* AI response formatting */
+  .ai-section { margin-bottom: 14px; }
+  .ai-section-title { color: var(--blue); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .ai-bullet { padding-left: 12px; position: relative; margin-bottom: 4px; font-size: 12px; }
+  .ai-bullet::before { content: '›'; position: absolute; left: 0; color: var(--green); }
+  .ai-warning { background: var(--red-dim); border: 1px solid var(--red); border-radius: 3px; padding: 8px 10px; font-size: 12px; color: #ffaaaa; margin-top: 8px; }
+  .ai-caution { background: var(--amber-dim); border: 1px solid var(--amber); border-radius: 3px; padding: 8px 10px; font-size: 12px; color: #ffe082; margin-top: 8px; }
+  .ai-go { background: var(--green-dim); border: 1px solid var(--green); border-radius: 3px; padding: 8px 10px; font-size: 12px; color: #b9f6ca; margin-top: 8px; }
+
+  .divider { height: 1px; background: var(--border); margin: 14px 0; }
+
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) var(--bg);
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .disclaimer {
+    font-size: 10px;
+    color: var(--muted);
+    text-align: center;
+    padding: 12px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>⬡ Trade Entry Checklist</h1>
+      <div class="sub">Pre-entry decision support · AI-evaluated · Day trading</div>
+    </div>
+    <div class="clock">
+      <div id="clock-time"><span id="time-val">--:--:--</span></div>
+      <div id="market-status" style="margin-top:3px;">-- MARKET --</div>
+    </div>
+  </div>
+
+  <!-- Ticker bar -->
+  <div class="ticker-bar">
+    <div class="field">
+      <label>Ticker</label>
+      <input class="ticker-input-big" id="ticker" type="text" placeholder="HCWB" maxlength="6">
+    </div>
+    <div class="field">
+      <label>Current Price</label>
+      <input id="cur-price" type="number" step="0.01" placeholder="0.00">
+    </div>
+    <div class="field">
+      <label>Catalyst</label>
+      <select id="catalyst">
+        <option value="">Select catalyst...</option>
+        <option value="earnings_beat">Earnings Beat</option>
+        <option value="earnings_miss">Earnings Miss</option>
+        <option value="fda_approval">FDA Approval</option>
+        <option value="clinical_results">Clinical Results</option>
+        <option value="merger_acq">Merger / Acquisition</option>
+        <option value="pr_news">Press Release / News</option>
+        <option value="short_squeeze">Short Squeeze Setup</option>
+        <option value="technical_breakout">Technical Breakout</option>
+        <option value="sector_momentum">Sector Momentum</option>
+        <option value="no_catalyst">No Clear Catalyst</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Float Size</label>
+      <select id="float-size">
+        <option value="">Select float...</option>
+        <option value="micro">Micro (&lt;5M)</option>
+        <option value="small">Small (5–20M)</option>
+        <option value="medium">Medium (20–100M)</option>
+        <option value="large">Large (&gt;100M)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Premarket Move</label>
+      <input id="pm-move" type="number" step="1" placeholder="e.g. 56">
+    </div>
+    <div class="field" style="align-self:end;">
+      <label>&nbsp;</label>
+      <div id="pm-display" style="padding:7px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:3px;font-size:13px;color:var(--muted);">-- %</div>
+    </div>
+  </div>
+
+  <!-- Score bar -->
+  <div class="score-panel">
+    <div>
+      <div class="score-label">Checklist score</div>
+      <div class="score-num" id="score-num" style="color:var(--muted);">0</div>
+    </div>
+    <div class="bar-wrap">
+      <div class="score-label">Trade readiness</div>
+      <div class="bar-track">
+        <div class="bar-fill" id="score-bar" style="width:0%;background:var(--muted);"></div>
+      </div>
+      <div class="bar-labels"><span>AVOID</span><span>CAUTION</span><span>READY</span></div>
+    </div>
+    <div>
+      <div class="score-label">Verdict</div>
+      <div class="score-verdict" id="score-verdict" style="color:var(--muted);">—</div>
+    </div>
+  </div>
+
+  <!-- 3-col checklist -->
+  <div class="grid3">
+
+    <!-- Col 1: Catalyst & Setup -->
+    <div class="panel">
+      <div class="panel-head"><div class="dot" style="background:var(--blue)"></div>Catalyst & Setup</div>
+      <div class="panel-body">
+        <div class="check-item" onclick="toggle(this)" data-pts="2">
+          <div class="check-box"></div>
+          <div><div class="check-label">Clear, named catalyst exists</div><div class="check-sub">News, earnings, FDA, PR — not "it feels like it"</div></div>
+        </div>
+        <div class="check-item" onclick="toggle(this)" data-pts="2">
+          <div class="check-box"></div>
+          <div><div class="check-label">Catalyst is fresh (&lt;24 hrs old)</div><div class="check-sub">Stale news = diluted momentum</div></div>
+        </div>
+        <div class="check-item" onclick="toggle(this)" data-pts="1">
+          <div class="check-box"></div>
+          <div><div class="check-label">Pre-market volume spike confirmed</div><div class="check-sub">Volume 5× or more above 30d avg before open</div></div>
+        </div>
+        <div class="check-item" onclick="toggle(this)" data-pts="2">
+          <div class="check-box"></div>
+          <div><div class="check-label">Pre-market: Ask Lifts dominating</div><div class="check-sub">Aggressive buyers, not sellers covering</div></div>
+        </div>
+        <div class="check-item red-check" onclick="toggle(this)" data-pts="-2" data-negative="true">
+          <div class="check-box"></div>
+          <div><div class="check-label" style="color:#ffaaaa">⚠ Dilution risk present</div><div class="check-sub">ATM offering, shelf registration active</div></div>
+        </div>
+        <div class="check-item red-check" onclick="toggle(this)" data-pts="-2" data-negative="true">
+          <div class="check-box"></div>
+          <div><div class="check-label" style="color:#ffaaaa">⚠ Already up 100%+ intraday</div><div class="check-sub">Chasing a parabolic move significantly raises failure risk</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Col 2: Technical Indicators -->
+    <div class="panel">
+      <div class="panel-head"><div class="dot" style="background:var(--amber)"></div>Technical Indicators</div>
+      <div class="panel-body">
+        <div class="check-item" onclick="toggle(this)" data-pts="2">
+          <div class="check-box"></div>
+          <div><div class="check-label">RSI between 40–70 (not extreme)</div><div class="check-sub">Avoid RSI &gt;80 on entry — overbought risk</div></div>
+        </div>
+        <div class="check-item" onclick="toggle(this)" data-pts="2">
+          <div class="check-box"></div>
+          <div><div class="check-label">1-min MACD bullish crossover</div><div class="check-sub">Blue line above signal line, histogram green</div></div>
+        </div>
+        <div class="check-item" onclick="toggle(this)" data-pts="1">
+          <div class="check-box"></div>
+          <div><div class="check-label">Price above VWAP</div><div class="check-sub">Average buyer is profitable — bulls in control</div></div>
+        </div>
+        <div class="check-item" onclick="toggle(this)" data-pts="2">
+          <div class="check-box"></div>
+          <div><div class="check-label">Clean support level below entry</div><div class="check-sub">Defined level for stop-loss, not arbitrary</div></div>
+        </div>
+        <div class="check-item" onclick="toggle(this)" data-pts="1">
+          <div class="check-box"></div>
+          <div><div class="check-label">Price consolidating (not falling)</div><div class="check-sub">Bull flag or tight range before entry</div></div>
+        </div>
+        <div class="check-item red-check" onclick="toggle(this)" data-pts="-2" data-negative="true">
+          <div class="check-box"></div>
+          <div><div class="check-label" style="color:#ffaaaa">⚠ RSI diverging bearishly</div><div class="check-sub">Price making highs but RSI not confirming</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Col 3: Level 2 & Tape -->
+    <div class="panel">
+      <div class="panel-head"><div class="dot" style="background:var(--green)"></div>Level 2 & Tape (Robinhood)</div>
+      <div class="panel-body">
+        <div class="check-item" onclick="toggle(this)" data-pts="2">
+          <div class="check-box"></div>
+          <div><div class="check-label">Ask side thinning out near entry</div><div class="check-sub">Fewer sellers blocking upward move</div></div>
+        </div>
+        <div class="check-item" onclick="toggle(this)" data-pts="2">
+          <div class="check-box"></div>
+          <div><div class="check-label">Bid stack building at support</div><div class="check-sub">Large limit buy orders visible below current price</div></div>
+        </div>
+        <div class="check-item" onclick="toggle(this)" data-pts="1">
+          <div class="check-box"></div>
+          <div><div class="check-label">Tape speed increasing on move up</div><div class="check-sub">Faster prints = more conviction behind the move</div></div>
+        </div>
+        <div class="check-item" onclick="toggle(this)" data-pts="2">
+          <div class="check-box"></div>
+          <div><div class="check-label">Large prints (&gt;5K shares) are green</div><div class="check-sub">Institutions/whales buying, not selling into strength</div></div>
+        </div>
+        <div class="check-item red-check" onclick="toggle(this)" data-pts="-2" data-negative="true">
+          <div class="check-box"></div>
+          <div><div class="check-label" style="color:#ffaaaa">⚠ Wide bid/ask spread (&gt;5%)</div><div class="check-sub">Slippage risk — use tight limit orders only</div></div>
+        </div>
+        <div class="check-item red-check" onclick="toggle(this)" data-pts="-1" data-negative="true">
+          <div class="check-box"></div>
+          <div><div class="check-label" style="color:#ffaaaa">⚠ Iceberg sellers suspected</div><div class="check-sub">Price stalls at resistance despite green tape</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2-col: Key Levels + Tape Observations -->
+  <div class="grid2">
+
+    <!-- Key levels -->
+    <div class="panel">
+      <div class="panel-head"><div class="dot" style="background:var(--red)"></div>Key Levels — Fill Before Evaluating</div>
+      <div class="panel-body">
+        <div class="level-grid">
+          <div class="level-row resist">
+            <label>Resistance 1 (nearest)</label>
+            <input id="res1" type="number" step="0.01" placeholder="$0.00">
+          </div>
+          <div class="level-row resist">
+            <label>Resistance 2 (extended)</label>
+            <input id="res2" type="number" step="0.01" placeholder="$0.00">
+          </div>
+          <div class="level-row support">
+            <label>Support 1 (stop zone)</label>
+            <input id="sup1" type="number" step="0.01" placeholder="$0.00">
+          </div>
+          <div class="level-row support">
+            <label>Support 2 (deep support)</label>
+            <input id="sup2" type="number" step="0.01" placeholder="$0.00">
+          </div>
+          <div class="level-row target">
+            <label>Target 1 (primary)</label>
+            <input id="tgt1" type="number" step="0.01" placeholder="$0.00">
+          </div>
+          <div class="level-row target">
+            <label>Target 2 (extended)</label>
+            <input id="tgt2" type="number" step="0.01" placeholder="$0.00">
+          </div>
+        </div>
+
+        <div class="rr-display" id="rr-display" style="display:none;">
+          <div class="rr-stat">
+            <div class="rr-val" id="rr-ratio" style="color:var(--amber);">—</div>
+            <div class="rr-lbl">Risk / Reward</div>
+          </div>
+          <div class="rr-stat">
+            <div class="rr-val" id="rr-upside" style="color:var(--green);">—</div>
+            <div class="rr-lbl">Upside to T1</div>
+          </div>
+          <div class="rr-stat">
+            <div class="rr-val" id="rr-downside" style="color:var(--red);">—</div>
+            <div class="rr-lbl">Risk to Stop</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tape observations -->
+    <div class="panel">
+      <div class="panel-head"><div class="dot" style="background:var(--amber)"></div>Tape Observations — Right Now</div>
+      <div class="panel-body">
+        <div class="tape-row-input">
+          <label>Tape speed</label>
+          <div class="tape-toggle">
+            <button class="tape-btn" onclick="setTape(this,'speed','slow')" data-group="speed" data-val="slow">SLOW</button>
+            <button class="tape-btn" onclick="setTape(this,'speed','medium')" data-group="speed" data-val="medium">MED</button>
+            <button class="tape-btn" onclick="setTape(this,'speed','fast')" data-group="speed" data-val="fast">FAST</button>
+          </div>
+        </div>
+        <div class="tape-row-input">
+          <label>Dominant color</label>
+          <div class="tape-toggle">
+            <button class="tape-btn" onclick="setTape(this,'color','green')" data-group="color" data-val="green">GREEN (BUYS)</button>
+            <button class="tape-btn" onclick="setTape(this,'color','mixed')" data-group="color" data-val="mixed">MIXED</button>
+            <button class="tape-btn" onclick="setTape(this,'color','red')" data-group="color" data-val="red">RED (SELLS)</button>
+          </div>
+        </div>
+        <div class="tape-row-input">
+          <label>Print sizes</label>
+          <div class="tape-toggle">
+            <button class="tape-btn" onclick="setTape(this,'size','small')" data-group="size" data-val="small">SMALL (retail)</button>
+            <button class="tape-btn" onclick="setTape(this,'size','mixed')" data-group="size" data-val="mixed">MIXED</button>
+            <button class="tape-btn" onclick="setTape(this,'size','large')" data-group="size" data-val="large">LARGE (whale)</button>
+          </div>
+        </div>
+        <div class="tape-row-input">
+          <label>Bid/ask spread</label>
+          <div class="tape-toggle">
+            <button class="tape-btn" onclick="setTape(this,'spread','tight')" data-group="spread" data-val="tight">TIGHT (&lt;2%)</button>
+            <button class="tape-btn" onclick="setTape(this,'spread','moderate')" data-group="spread" data-val="moderate">MOD (2-5%)</button>
+            <button class="tape-btn" onclick="setTape(this,'spread','wide')" data-group="spread" data-val="wide">WIDE (&gt;5%)</button>
+          </div>
+        </div>
+        <div class="tape-row-input">
+          <label>Depth chart</label>
+          <div class="tape-toggle">
+            <button class="tape-btn" onclick="setTape(this,'depth','bids')" data-group="depth" data-val="bids">BIDS HEAVY</button>
+            <button class="tape-btn" onclick="setTape(this,'depth','balanced')" data-group="depth" data-val="balanced">BALANCED</button>
+            <button class="tape-btn" onclick="setTape(this,'depth','asks')" data-group="depth" data-val="asks">ASKS HEAVY</button>
+          </div>
+        </div>
+        <div class="tape-row-input">
+          <label>Price action</label>
+          <div class="tape-toggle">
+            <button class="tape-btn" onclick="setTape(this,'priceaction','consolidating')" data-group="priceaction" data-val="consolidating">CONSOLIDATING</button>
+            <button class="tape-btn" onclick="setTape(this,'priceaction','grinding_up')" data-group="priceaction" data-val="grinding_up">GRINDING UP</button>
+            <button class="tape-btn" onclick="setTape(this,'priceaction','fading')" data-group="priceaction" data-val="fading">FADING</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Evaluate button -->
+  <button class="eval-btn" id="eval-btn" onclick="evaluate()">
+    ▶ &nbsp; Evaluate Trade & Identify Entry / Exit Points
+  </button>
+
+  <!-- AI output panel -->
+  <div class="ai-panel" id="ai-panel" style="display:none;">
+    <div class="ai-head">
+      <div class="ai-pulse"></div>
+      AI Trade Analysis · Entry & Exit Evaluation
+      <span id="ai-ticker-display" style="margin-left:auto;font-family:var(--font-head);font-size:14px;color:#fff;"></span>
+    </div>
+    <div class="ai-body" id="ai-body">
+      <div class="ai-thinking"><span></span><span></span><span></span></div>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    ⚠ This tool is for educational and decision-support purposes only. It does not constitute financial advice. Day trading involves substantial risk of loss. Past patterns do not guarantee future results. Always use a defined risk management strategy. Consult a financial professional before trading.
+  </div>
+
+</div>
+
+<script>
+  // Clock
+  function updateClock() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2,'0');
+    const m = String(now.getMinutes()).padStart(2,'0');
+    const s = String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('time-val').textContent = h+':'+m+':'+s;
+    const dayOfWeek = now.getDay();
+    const totalMin = now.getHours()*60 + now.getMinutes();
+    let status = '';
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      status = '<span style="color:var(--muted)">WEEKEND</span>';
+    } else if (totalMin >= 240 && totalMin < 570) {
+      status = '<span style="color:var(--amber)">PRE-MARKET</span>';
+    } else if (totalMin >= 570 && totalMin < 960) {
+      status = '<span style="color:var(--green)">● MARKET OPEN</span>';
+    } else if (totalMin >= 960 && totalMin < 1200) {
+      status = '<span style="color:var(--blue)">AFTER-HOURS</span>';
+    } else {
+      status = '<span style="color:var(--muted)">MARKET CLOSED</span>';
+    }
+    document.getElementById('market-status').innerHTML = status;
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // Premarket % display
+  document.getElementById('pm-move').addEventListener('input', function() {
+    const v = parseFloat(this.value);
+    const el = document.getElementById('pm-display');
+    if (!isNaN(v)) {
+      el.textContent = (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+      el.style.color = v >= 20 ? 'var(--green)' : v >= 0 ? 'var(--amber)' : 'var(--red)';
+    } else {
+      el.textContent = '-- %';
+      el.style.color = 'var(--muted)';
+    }
+  });
+
+  // Toggle checklist items
+  let totalScore = 0;
+  let maxScore = 0;
+
+  function calcMaxScore() {
+    let m = 0;
+    document.querySelectorAll('.check-item').forEach(item => {
+      const pts = parseInt(item.dataset.pts);
+      if (pts > 0) m += pts;
+    });
+    return m;
+  }
+  maxScore = calcMaxScore();
+
+  function toggle(el) {
+    el.classList.toggle('checked');
+    updateScore();
+    updateRR();
+  }
+
+  function updateScore() {
+    let score = 0;
+    document.querySelectorAll('.check-item.checked').forEach(item => {
+      score += parseInt(item.dataset.pts);
+    });
+    const pct = Math.max(0, Math.min(100, (score / maxScore) * 100));
+    document.getElementById('score-num').textContent = score;
+    const bar = document.getElementById('score-bar');
+    bar.style.width = pct + '%';
+
+    let color, verdict;
+    if (score <= 2) { color = 'var(--red)'; verdict = 'AVOID'; }
+    else if (score <= 6) { color = 'var(--amber)'; verdict = 'CAUTION'; }
+    else if (score <= 10) { color = 'var(--blue)'; verdict = 'MONITOR'; }
+    else { color = 'var(--green)'; verdict = 'READY'; }
+
+    bar.style.background = color;
+    document.getElementById('score-num').style.color = color;
+    document.getElementById('score-verdict').textContent = verdict;
+    document.getElementById('score-verdict').style.color = color;
+  }
+
+  // Tape toggles
+  const tapeState = {};
+  function setTape(btn, group, val) {
+    document.querySelectorAll(`[data-group="${group}"]`).forEach(b => {
+      b.classList.remove('active-green','active-red','active-amber');
+    });
+    tapeState[group] = val;
+    const greenVals = ['fast','green','large','tight','bids','grinding_up','consolidating'];
+    const redVals = ['slow','red','wide','asks','fading'];
+    if (greenVals.includes(val)) btn.classList.add('active-green');
+    else if (redVals.includes(val)) btn.classList.add('active-red');
+    else btn.classList.add('active-amber');
+  }
+
+  // R/R calculator
+  function updateRR() {
+    const price = parseFloat(document.getElementById('cur-price').value);
+    const sup1 = parseFloat(document.getElementById('sup1').value);
+    const tgt1 = parseFloat(document.getElementById('tgt1').value);
+    if (!isNaN(price) && !isNaN(sup1) && !isNaN(tgt1) && price > 0) {
+      const risk = price - sup1;
+      const reward = tgt1 - price;
+      if (risk > 0 && reward > 0) {
+        const rr = (reward/risk).toFixed(1);
+        const upPct = ((reward/price)*100).toFixed(1);
+        const downPct = ((risk/price)*100).toFixed(1);
+        document.getElementById('rr-ratio').textContent = '1:'+rr;
+        document.getElementById('rr-upside').textContent = '+'+upPct+'%';
+        document.getElementById('rr-downside').textContent = '-'+downPct+'%';
+        const rrEl = document.getElementById('rr-ratio');
+        rrEl.style.color = parseFloat(rr) >= 2 ? 'var(--green)' : parseFloat(rr) >= 1 ? 'var(--amber)' : 'var(--red)';
+        document.getElementById('rr-display').style.display = 'flex';
+      }
+    }
+  }
+  ['cur-price','sup1','tgt1'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateRR);
+  });
+
+  // Build checklist summary for AI
+  function buildChecklistSummary() {
+    const checked = [], unchecked = [];
+    document.querySelectorAll('.check-item').forEach(item => {
+      const label = item.querySelector('.check-label').textContent.replace('⚠ ','');
+      const pts = item.dataset.pts;
+      if (item.classList.contains('checked')) checked.push(`[+${pts}] ${label}`);
+      else unchecked.push(label);
+    });
+    return { checked, unchecked };
+  }
+
+  // Evaluate
+  async function evaluate() {
+    const ticker = document.getElementById('ticker').value.toUpperCase() || 'UNKNOWN';
+    const price = document.getElementById('cur-price').value;
+    const catalyst = document.getElementById('catalyst').value;
+    const floatSize = document.getElementById('float-size').value;
+    const pmMove = document.getElementById('pm-move').value;
+    const res1 = document.getElementById('res1').value;
+    const res2 = document.getElementById('res2').value;
+    const sup1 = document.getElementById('sup1').value;
+    const sup2 = document.getElementById('sup2').value;
+    const tgt1 = document.getElementById('tgt1').value;
+    const tgt2 = document.getElementById('tgt2').value;
+    const {checked, unchecked} = buildChecklistSummary();
+
+    let scoreNum = 0;
+    document.querySelectorAll('.check-item.checked').forEach(item => { scoreNum += parseInt(item.dataset.pts); });
+
+    const panel = document.getElementById('ai-panel');
+    const body = document.getElementById('ai-body');
+    panel.style.display = 'block';
+    document.getElementById('ai-ticker-display').textContent = ticker + (price ? ' @ $'+price : '');
+    body.innerHTML = '<div class="ai-thinking"><span></span><span></span><span></span></div> &nbsp; Analyzing trade setup...';
+    body.className = 'ai-body loading';
+
+    document.getElementById('eval-btn').disabled = true;
+
+    const prompt = `You are an expert day trader and trading coach. A trader is preparing to enter a trade and needs your real-time analysis. Be direct, specific, and concise — this is a fast-moving trading environment.
+
+TRADE SETUP DATA:
+- Ticker: ${ticker}
+- Current Price: $${price || 'not specified'}
+- Catalyst: ${catalyst || 'not specified'}
+- Float: ${floatSize || 'not specified'}
+- Pre-market move: ${pmMove ? pmMove+'%' : 'not specified'}
+- Checklist score: ${scoreNum}/14
+
+KEY LEVELS PROVIDED:
+- Resistance 1: $${res1 || 'N/A'}
+- Resistance 2: $${res2 || 'N/A'}
+- Support 1 (stop zone): $${sup1 || 'N/A'}
+- Support 2 (deep): $${sup2 || 'N/A'}
+- Target 1: $${tgt1 || 'N/A'}
+- Target 2: $${tgt2 || 'N/A'}
+
+TAPE / LEVEL 2 OBSERVATIONS:
+- Tape speed: ${tapeState.speed || 'not observed'}
+- Dominant color: ${tapeState.color || 'not observed'}
+- Print sizes: ${tapeState.size || 'not observed'}
+- Bid/Ask spread: ${tapeState.spread || 'not observed'}
+- Depth chart: ${tapeState.depth || 'not observed'}
+- Price action: ${tapeState.priceaction || 'not observed'}
+
+CHECKLIST ITEMS CONFIRMED:
+${checked.length > 0 ? checked.join('\n') : 'None confirmed'}
+
+CHECKLIST ITEMS NOT CONFIRMED:
+${unchecked.join('\n')}
+
+Provide your analysis in this exact structure:
+
+VERDICT: [STRONG BUY / BUY / WAIT / AVOID] — one line with the single most important reason why
+
+ENTRY STRATEGY:
+- Ideal entry price or zone with specific reasoning based on the levels provided
+- Entry trigger (what must happen on the tape before entering)
+- Order type recommendation (limit vs market)
+
+EXIT PLAN:
+- Target 1 exit price and % gain
+- Target 2 exit price (if applicable)
+- Partial vs full exit strategy
+
+STOP LOSS:
+- Exact stop price based on provided support levels
+- What tape signal confirms the stop should be hit (don't just hold hoping it bounces)
+
+KEY RISKS:
+- 2-3 specific risks for THIS setup (not generic warnings)
+
+TAPE SIGNALS TO WATCH:
+- 2-3 specific things to watch on the Robinhood Level 2 right now
+
+Keep each section tight — 2-4 lines max. Use $ prices throughout. Be a trading coach, not a textbook.`;
+
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+
+      const data = await response.json();
+      const text = data.content?.map(b => b.text || '').join('') || '';
+
+      body.className = 'ai-body';
+      body.innerHTML = formatAIResponse(text, price, sup1, tgt1, tgt2, res1, ticker);
+
+    } catch(err) {
+      body.className = 'ai-body';
+      body.innerHTML = '<div class="ai-warning">⚠ Could not reach AI analysis. Check your connection. Error: ' + err.message + '</div>';
+    }
+
+    document.getElementById('eval-btn').disabled = false;
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function formatAIResponse(text, price, sup1, tgt1, tgt2, res1, ticker) {
+    const lines = text.split('\n').filter(l => l.trim());
+    let html = '';
+    let currentSection = '';
+    let verdictDone = false;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      if (trimmed.startsWith('VERDICT:')) {
+        const content = trimmed.replace('VERDICT:','').trim();
+        let verdictClass = 'ai-caution';
+        if (content.includes('STRONG BUY') || content.includes('BUY')) verdictClass = 'ai-go';
+        if (content.includes('AVOID')) verdictClass = 'ai-warning';
+        html += `<div class="${verdictClass}" style="font-size:14px;font-weight:500;margin-bottom:14px;"><strong>VERDICT:</strong> ${content}</div>`;
+        verdictDone = true;
+      } else if (/^(ENTRY STRATEGY|EXIT PLAN|STOP LOSS|KEY RISKS|TAPE SIGNALS TO WATCH):?$/.test(trimmed)) {
+        currentSection = trimmed.replace(':','');
+        html += `<div class="ai-section-title" style="margin-top:12px;">${trimmed}</div>`;
+      } else if (trimmed.startsWith('-')) {
+        html += `<div class="ai-bullet">${trimmed.substring(1).trim()}</div>`;
+      } else {
+        html += `<div class="ai-bullet">${trimmed}</div>`;
+      }
+    }
+
+    // Entry/Exit cards
+    const p = parseFloat(price);
+    const s = parseFloat(sup1);
+    const t1 = parseFloat(tgt1);
+    const t2 = parseFloat(tgt2);
+    const r1 = parseFloat(res1);
+
+    if (!isNaN(p) && !isNaN(s) && !isNaN(t1)) {
+      const stopPct = (((p-s)/p)*100).toFixed(1);
+      const tgt1Pct = (((t1-p)/p)*100).toFixed(1);
+      const tgt2Str = !isNaN(t2) ? '$'+t2.toFixed(2) : (r1 ? '$'+r1.toFixed(2) : '—');
+      const tgt2Pct = !isNaN(t2) ? '+'+( ((t2-p)/p)*100).toFixed(1)+'%' : '';
+
+      html += `<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px;">
+        <div class="ai-section-title">Calculated levels</div>
+        <div class="entry-exit-grid">
+          <div class="ee-card entry">
+            <div class="ee-label">Ideal entry zone</div>
+            <div class="ee-price">$${p.toFixed(2)}</div>
+            <div class="ee-note">Current price — use limit order near ask</div>
+          </div>
+          <div class="ee-card exit">
+            <div class="ee-label">Target 1 exit</div>
+            <div class="ee-price">$${t1.toFixed(2)}</div>
+            <div class="ee-note">+${tgt1Pct}% from entry · Consider partial exit here</div>
+          </div>
+          <div class="ee-card stop">
+            <div class="ee-label">Stop loss</div>
+            <div class="ee-price">$${s.toFixed(2)}</div>
+            <div class="ee-note">-${stopPct}% · Below support 1 · Hard stop</div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    return html || '<div class="ai-caution">Analysis returned but could not be parsed. Raw: ' + text.substring(0,200) + '</div>';
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Trading Copilot</title>
+  <link rel="stylesheet" href="styles/panel.css"/>
+</head>
+<body>
+  <div id="app">
+
+    <!-- ── Top control bar ─────────────────────────────────────── -->
+    <div class="control-bar">
+      <input id="ticker-input" class="ticker-in" placeholder="TICKER" maxlength="6"/>
+      <select id="strategy-select">
+        <option value="regular">Regular</option>
+        <option value="scalp">Scalp</option>
+      </select>
+      <select id="mode-select">
+        <option value="off">Off</option>
+        <option value="research">Research</option>
+        <option value="intrade">In-Trade</option>
+        <option value="exit">Exit Plan</option>
+      </select>
+      <button id="config-btn" class="icon-btn" title="Settings">⚙</button>
+    </div>
+
+    <!-- ── Entry bar (intrade / exit only) ─────────────────────── -->
+    <div id="entry-bar" class="entry-bar hidden">
+      <span class="entry-label">Entry $</span>
+      <input id="entry-input" class="entry-in" placeholder="0.000" type="number" step="0.001"/>
+      <button id="set-entry-btn" class="small-btn">Set</button>
+      <span id="pnl-display" class="pnl-display">—</span>
+    </div>
+
+    <!-- ── Off state ───────────────────────────────────────────── -->
+    <div id="off-state" class="off-state">
+      <p>Panel paused</p>
+      <p class="hint">Select a mode to begin monitoring</p>
+    </div>
+
+    <!-- ── Main panel ──────────────────────────────────────────── -->
+    <div id="main-panel" class="hidden">
+
+      <!-- Price -->
+      <div class="price-row">
+        <span id="price-display" class="price-big">—</span>
+        <span id="change-display" class="price-change">—</span>
+        <span id="clock" class="clock">—</span>
+      </div>
+
+      <!-- Scalp spread callout (scalp mode only) -->
+      <div id="scalp-callout" class="scalp-callout hidden">
+        <div>
+          <div class="sc-label">Spread</div>
+          <span id="spread-big" class="spread-big">—</span>
+          <span id="spread-rating" class="spread-rating">—</span>
+        </div>
+        <div class="tape-speed-wrap">
+          <div class="sc-label">Tape</div>
+          <span id="tape-speed" class="tape-speed">—</span>
+        </div>
+      </div>
+
+      <!-- Indicators grid -->
+      <div class="grid3">
+        <div class="metric">
+          <div class="metric-label">RSI 1m</div>
+          <div id="rsi-val" class="metric-val">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">MACD</div>
+          <div id="macd-val" class="metric-val">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">VWAP</div>
+          <div id="vwap-val" class="metric-val">—</div>
+        </div>
+      </div>
+
+      <!-- Bid/Ask and spread -->
+      <div class="grid2">
+        <div class="metric">
+          <div class="metric-label">Bid / Ask</div>
+          <div id="bidask-val" class="metric-val sm">—</div>
+        </div>
+        <div id="spread-metric" class="metric">
+          <div class="metric-label">Spread</div>
+          <div id="spread-val" class="metric-val">—</div>
+        </div>
+      </div>
+
+      <!-- Volume bar -->
+      <div class="vol-wrap">
+        <div class="vol-top">
+          <span class="metric-label">Volume vs avg</span>
+          <span id="vol-ratio" class="vol-ratio">—</span>
+        </div>
+        <div class="vol-track">
+          <div id="vol-fill" class="vol-fill" style="width:0%"></div>
+        </div>
+        <div class="vol-foot">
+          <span id="vol-current">Vol: —</span>
+          <span id="vol-avg">Avg: —</span>
+        </div>
+      </div>
+
+      <!-- Mini chart -->
+      <div class="mini-chart-wrap">
+        <span class="chart-label">1m</span>
+        <span id="vwap-label" class="vwap-label">VWAP</span>
+        <canvas id="mini-chart" width="340" height="56"></canvas>
+      </div>
+
+      <hr class="divider"/>
+
+      <!-- Trade levels (intrade mode) -->
+      <div id="intrade-levels" class="hidden">
+        <div class="section-label">trade levels</div>
+        <div class="levels-block">
+          <div class="level-row">
+            <span class="level-lbl">Entry</span>
+            <span id="lv-entry" class="level-val">—</span>
+          </div>
+          <div class="level-row">
+            <span class="level-lbl">Stop loss</span>
+            <span id="lv-stop" class="level-val red">—</span>
+          </div>
+          <div id="targets-block">
+            <div class="level-row">
+              <span class="level-lbl">Target 1</span>
+              <input id="target1-input" class="level-input" placeholder="0.000" type="number" step="0.001"/>
+            </div>
+            <div class="level-row">
+              <span class="level-lbl">Target 2</span>
+              <input id="target2-input" class="level-input" placeholder="0.000" type="number" step="0.001"/>
+            </div>
+          </div>
+          <div class="level-row">
+            <span class="level-lbl">Stop input</span>
+            <input id="stop-input" class="level-input" placeholder="0.000" type="number" step="0.001"/>
+          </div>
+          <div class="level-row">
+            <span class="level-lbl">Time in trade</span>
+            <span id="lv-time" class="level-val">—</span>
+          </div>
+          <div class="level-row">
+            <span class="level-lbl">P&amp;L</span>
+            <span id="lv-pnl" class="level-val">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Exit plan (exit mode) -->
+      <div id="exit-levels" class="hidden">
+        <div class="section-label">exit plan</div>
+        <div class="levels-block">
+          <div class="level-row">
+            <span class="level-lbl">Entry</span>
+            <span id="ex-entry" class="level-val">—</span>
+          </div>
+          <div class="level-row">
+            <span class="level-lbl">Current</span>
+            <span id="ex-current" class="level-val">—</span>
+          </div>
+          <div class="level-row">
+            <span class="level-lbl">Hard stop</span>
+            <span id="ex-stop" class="level-val red">—</span>
+          </div>
+          <div class="level-row">
+            <span class="level-lbl">P&amp;L</span>
+            <span id="ex-pnl" class="level-val">—</span>
+          </div>
+        </div>
+      </div>
+
+      <hr class="divider"/>
+
+      <!-- Alerts -->
+      <div class="section-label">alerts</div>
+      <div id="alerts-container">
+        <div class="no-alerts">No alerts — monitoring active</div>
+      </div>
+
+      <hr class="divider"/>
+
+      <!-- Tape feed -->
+      <div class="section-label">tape</div>
+      <div id="tape-container" class="tape-wrap">
+        <div class="no-tape">Waiting for data...</div>
+      </div>
+
+      <hr class="divider"/>
+
+      <!-- Message selector -->
+      <div class="section-label">send to claude</div>
+      <div class="msg-selector">
+        <select id="message-select" class="msg-dropdown">
+          <option value="">Select message...</option>
+        </select>
+        <div id="msg-preview" class="msg-preview hidden">—</div>
+        <div class="msg-btn-row">
+          <button id="send-claude-btn" class="btn btn-claude" disabled>Send ↗</button>
+          <button id="edit-msg-btn" class="btn">Edit</button>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="btn-row">
+        <button id="emergency-btn" class="btn btn-exit">emergency exit</button>
+        <button id="move-stop-btn" class="btn">move stop</button>
+      </div>
+
+    </div><!-- /#main-panel -->
+
+    <!-- ── Status bar ───────────────────────────────────────────── -->
+    <div class="status-bar">
+      <span>
+        <span id="status-dot" class="status-dot disconnected"></span>
+        <span id="status-text">Disconnected</span>
+      </span>
+      <span id="feed-label">IEX · —</span>
+    </div>
+
+  </div><!-- /#app -->
+
+  <script src="../shared/placeholders.js"></script>
+  <script src="components/chart.js"></script>
+  <script src="components/alerts.js"></script>
+  <script src="components/messages.js"></script>
+  <script src="components/panel.js"></script>
+</body>
+</html>

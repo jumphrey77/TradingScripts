@@ -1,0 +1,123 @@
+//@version=6
+indicator("Probable Halt Detector v6", overlay=true, max_labels_count=500)
+
+// ─────────────────────────────────────────────────────────────
+// USER SETTINGS
+// ─────────────────────────────────────────────────────────────
+onlyRTH            = input.bool(true,  "Only detect during Regular Trading Hours")
+rthSession         = input.session("0930-1600", "RTH Session")
+minMissingBars     = input.int(2, "Minimum missing bars to flag", minval=1, maxval=30)
+expectedChartTfMin = input.int(1, "Expected chart timeframe in minutes", minval=1, maxval=60)
+
+showLabels         = input.bool(true,  "Show labels")
+showShapes         = input.bool(true,  "Show chart markers")
+showBg             = input.bool(false, "Highlight resume bar")
+labelOffsetTicks   = input.int(20, "Label offset (ticks)", minval=1, maxval=500)
+
+// ─────────────────────────────────────────────────────────────
+// BASIC TIME / SESSION LOGIC
+// ─────────────────────────────────────────────────────────────
+inSession = not na(time(timeframe.period, rthSession))
+
+isMinuteChart = timeframe.isminutes
+chartTfMin    = timeframe.multiplier
+
+prevTime = time[1]
+currTime = time
+gapMs    = currTime - prevTime
+gapMin   = gapMs / 60000.0
+
+expectedGapMin = expectedChartTfMin * 1.0
+
+// Example:
+// expectedChartTfMin = 1
+// minMissingBars = 2
+// then a gap of 2+ minutes is flagged.
+gapDetected = isMinuteChart and gapMin >= (expectedGapMin * minMissingBars)
+
+validGap = gapDetected and (onlyRTH ? (inSession and inSession[1]) : true)
+
+// ─────────────────────────────────────────────────────────────
+// RESUME CLASSIFICATION
+// ─────────────────────────────────────────────────────────────
+resumeVsPrevUp   = validGap and close > close[1]
+resumeVsPrevDown = validGap and close < close[1]
+resumeVsPrevFlat = validGap and close == close[1]
+
+resumeGreen = validGap and close > open
+resumeRed   = validGap and close < open
+resumeDoji  = validGap and close == open
+
+resumeText =
+     resumeVsPrevUp   ? "Resume Up" :
+     resumeVsPrevDown ? "Resume Down" :
+     "Resume Flat"
+
+candleText =
+     resumeGreen ? "Green bar" :
+     resumeRed   ? "Red bar" :
+     "Doji"
+
+// Put labels above highs so they don't sit inside other overlays as much.
+labelY = high + (syminfo.mintick * labelOffsetTicks)
+
+// ─────────────────────────────────────────────────────────────
+// LABELS
+// ─────────────────────────────────────────────────────────────
+if showLabels and validGap
+    labelColor =
+         resumeVsPrevUp   ? color.new(color.green, 0) :
+         resumeVsPrevDown ? color.new(color.red, 0) :
+         color.new(color.gray, 0)
+
+    label.new(
+         bar_index,
+         labelY,
+         "HALT?\n" +
+         resumeText + "\n" +
+         "Gap: " + str.tostring(gapMin, "#.0") + "m\n" +
+         candleText,
+         style=label.style_label_down,
+         textcolor=color.white,
+         color=labelColor,
+         size=size.small
+     )
+
+// ─────────────────────────────────────────────────────────────
+// SHAPES (must be in global scope)
+// ─────────────────────────────────────────────────────────────
+shapeUp   = showShapes and resumeVsPrevUp
+shapeDown = showShapes and resumeVsPrevDown
+shapeFlat = showShapes and resumeVsPrevFlat
+
+plotshape(shapeUp,   title="Resume Up",   style=shape.triangleup,   location=location.abovebar, color=color.green, size=size.tiny)
+plotshape(shapeDown, title="Resume Down", style=shape.triangledown, location=location.abovebar, color=color.red,   size=size.tiny)
+plotshape(shapeFlat, title="Resume Flat", style=shape.circle,       location=location.abovebar, color=color.gray,  size=size.tiny)
+
+// ─────────────────────────────────────────────────────────────
+// BACKGROUND
+// ─────────────────────────────────────────────────────────────
+bgcolor(showBg and validGap ? color.new(color.yellow, 82) : na)
+
+// ─────────────────────────────────────────────────────────────
+// WARNINGS
+// ─────────────────────────────────────────────────────────────
+if barstate.islast and not isMinuteChart
+    label.new(
+         bar_index,
+         high,
+         "Use on minute charts.\nExpected TF now set to " + str.tostring(expectedChartTfMin) + " min.",
+         style=label.style_label_down,
+         color=color.orange,
+         textcolor=color.black
+     )
+
+if barstate.islast and isMinuteChart and chartTfMin != expectedChartTfMin
+    label.new(
+         bar_index,
+         high,
+         "Chart TF is " + str.tostring(chartTfMin) + "m,\nbut expected TF is " + str.tostring(expectedChartTfMin) + "m.\nUpdate input if needed.",
+         style=label.style_label_down,
+         color=color.orange,
+         textcolor=color.black
+     )

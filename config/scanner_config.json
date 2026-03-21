@@ -5,7 +5,7 @@
     "DebugAPI": false,
     "DefaultTheme": "light",
     "OutputSymbolAnalysis": false,
-    "UsePreMarketData": false
+    "UsePreMarketData": true
   },
   "finviz": {
     "avgvol": "o500",

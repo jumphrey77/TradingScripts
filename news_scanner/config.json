@@ -3,16 +3,22 @@
   "scan_interval_seconds": 120,
   "news_max_age_hours": 4,
   "alert_sound_repeat": 3,
-  "rolling_display_window": 20,
+  "rolling_display_window": 40,
   "log_file": "alerts_log.json",
   "min_avg_volume": 500000,
   "min_relative_volume": 2.0,
   "max_float_million": 100,
   "watchlist": [
-    "RXT",
-    "ESLT"
+    "SCNX",
+    "KALA"
   ],
   "keywords": [
+    "defense",
+    "navy",
+    "army",
+    "marines",
+    "missile",
+    "tomahawk",
     "partnership",
     "partners",
     "fda approval",

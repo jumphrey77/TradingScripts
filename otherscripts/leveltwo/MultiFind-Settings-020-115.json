@@ -1,0 +1,110 @@
+[
+  {
+    "colIndex": 0,
+    "comment": "SPREAD LABEL",
+    "diac": false,
+    "loc": 2,
+    "maj": false,
+    "on": true,
+    "text": "Spread"
+  },
+  {
+    "colIndex": 0,
+    "comment": "BUY-BIDS",
+    "diac": false,
+    "loc": 2,
+    "maj": false,
+    "on": true,
+    "text": "$0.20,$0.25"
+  },
+  {
+    "colIndex": 0,
+    "comment": "$0.20-$0.25",
+    "diac": false,
+    "loc": 2,
+    "maj": false,
+    "on": true,
+    "text": "$0.20,$0.25"
+  },
+  {
+    "colIndex": 1,
+    "comment": "$0.30-$0.35",
+    "diac": false,
+    "loc": 2,
+    "maj": false,
+    "on": true,
+    "text": "$0.30,$0.35"
+  },
+  {
+    "colIndex": 2,
+    "comment": "$0.40-$0.45",
+    "diac": false,
+    "loc": 2,
+    "maj": false,
+    "on": true,
+    "text": "$0.40,$0.45"
+  },
+  {
+    "colIndex": 3,
+    "comment": "$0.50-$0.55",
+    "diac": false,
+    "loc": 2,
+    "maj": false,
+    "on": true,
+    "text": "$0.50,$0.55"
+  },
+  {
+    "colIndex": 4,
+    "comment": "$0.60-$0.65",
+    "diac": true,
+    "loc": 2,
+    "maj": false,
+    "on": true,
+    "text": "$0.60,$0.65"
+  },
+  {
+    "colIndex": 5,
+    "comment": "$0.70-$0.75",
+    "diac": true,
+    "loc": 2,
+    "maj": false,
+    "on": true,
+    "text": "$0.70,$0.75"
+  },
+  {
+    "colIndex": 6,
+    "comment": "$0.80-$0.85",
+    "diac": true,
+    "loc": 2,
+    "maj": false,
+    "on": true,
+    "text": "$0.80,$0.85"
+  },
+  {
+    "colIndex": 7,
+    "comment": "$0.90-$0.95",
+    "diac": false,
+    "loc": 2,
+    "maj": false,
+    "on": true,
+    "text": "$0.90,$0.95"
+  },
+  {
+    "colIndex": 8,
+    "comment": "$1.00-$1.05",
+    "diac": false,
+    "loc": 2,
+    "maj": false,
+    "on": true,
+    "text": "$1.00,$1.05"
+  },
+  {
+    "colIndex": 9,
+    "comment": "$1.10-$1.15",
+    "diac": false,
+    "loc": 2,
+    "maj": false,
+    "on": true,
+    "text": "$1.10,$1.15"
+  }
+]

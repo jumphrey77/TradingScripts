@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Settings</title>
+  <style>
+    :root {
+      --bg:     #0d0f11;
+      --bg2:    #151820;
+      --bg3:    #1c2028;
+      --border: rgba(255,255,255,0.1);
+      --text:   #e8eaf0;
+      --muted:  #6b7280;
+      --green:  #22c55e;
+      --red:    #ef4444;
+      --blue:   #3b82f6;
+      --blue-bg:rgba(59,130,246,0.1);
+      --blue-b: rgba(59,130,246,0.25);
+      --font:   'JetBrains Mono','Fira Code','Consolas',monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 12px; padding: 20px; }
+    h2 { font-size: 14px; font-weight: 600; margin-bottom: 20px; color: var(--text); letter-spacing: 0.04em; }
+    .section { margin-bottom: 20px; }
+    .section-title { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; border-bottom: 0.5px solid var(--border); padding-bottom: 5px; }
+    .field { margin-bottom: 10px; }
+    label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    input[type="text"], input[type="password"], select {
+      width: 100%; font-family: var(--font); font-size: 12px; color: var(--text);
+      background: var(--bg2); border: 0.5px solid rgba(255,255,255,0.12);
+      border-radius: 5px; padding: 7px 9px;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--blue); }
+    .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+    .toggle-label { font-size: 11px; color: var(--text); }
+    .toggle { position: relative; width: 36px; height: 20px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; inset: 0; background: var(--bg3); border-radius: 20px; cursor: pointer; border: 0.5px solid var(--border); transition: 0.2s; }
+    .slider:before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; bottom: 2px; background: var(--muted); border-radius: 50%; transition: 0.2s; }
+    input:checked + .slider { background: var(--blue-bg); border-color: var(--blue-b); }
+    input:checked + .slider:before { transform: translateX(16px); background: var(--blue); }
+    .btn-row { display: flex; gap: 8px; margin-top: 24px; }
+    .btn { flex: 1; font-family: var(--font); font-size: 12px; padding: 9px; border-radius: 5px; cursor: pointer; }
+    .btn-save { background: var(--blue-bg); border: 0.5px solid var(--blue-b); color: var(--blue); }
+    .btn-save:hover { background: rgba(59,130,246,0.2); }
+    .btn-cancel { background: var(--bg2); border: 0.5px solid var(--border); color: var(--muted); }
+    .btn-cancel:hover { color: var(--text); }
+    .test-row { display: flex; gap: 6px; align-items: center; }
+    .test-row input { flex: 1; }
+    .test-btn { padding: 7px 12px; font-family: var(--font); font-size: 11px; background: var(--bg3); border: 0.5px solid var(--border); color: var(--muted); border-radius: 5px; cursor: pointer; white-space: nowrap; }
+    .test-btn:hover { color: var(--text); }
+    #test-result { font-size: 10px; margin-top: 5px; }
+    .connected { color: var(--green); }
+    .failed    { color: var(--red); }
+  </style>
+</head>
+<body>
+
+  <h2>⚙ Settings</h2>
+
+  <div class="section">
+    <div class="section-title">Alpaca Connection</div>
+
+    <div class="field">
+      <label>API Key ID</label>
+      <input type="text" id="api-key" placeholder="PKxxxxxxxxxxxxxxxxxxxx"/>
+    </div>
+
+    <div class="field">
+      <label>Secret Key</label>
+      <input type="password" id="api-secret" placeholder="••••••••••••••••••••"/>
+    </div>
+
+    <div class="field">
+      <label>Mode</label>
+      <select id="paper-mode">
+        <option value="paper">Paper Trading</option>
+        <option value="live">Live Trading</option>
+      </select>
+    </div>
+
+    <div class="test-row">
+      <button class="test-btn" onclick="testConnection()">Test Connection</button>
+      <div id="test-result"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">App Settings</div>
+
+    <div class="toggle-row">
+      <span class="toggle-label">Alert sounds</span>
+      <label class="toggle">
+        <input type="checkbox" id="alert-sound" checked/>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="toggle-row">
+      <span class="toggle-label">Auto-send alerts to Claude</span>
+      <label class="toggle">
+        <input type="checkbox" id="auto-send"/>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="field" style="margin-top:10px;">
+      <label>Default strategy</label>
+      <select id="default-strategy">
+        <option value="regular">Regular</option>
+        <option value="scalp">Scalp</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Data refresh rate</label>
+      <select id="refresh-rate">
+        <option value="1000">1 second</option>
+        <option value="2000">2 seconds</option>
+        <option value="5000">5 seconds</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-cancel" onclick="window.close()">Cancel</button>
+    <button class="btn btn-save" onclick="saveConfig()">Save & Connect</button>
+  </div>
+
+<script>
+  async function load() {
+    const cfg = await window.copilot.getConfig()
+    if (cfg.alpacaKey)    document.getElementById('api-key').value         = cfg.alpacaKey
+    if (cfg.alpacaSecret) document.getElementById('api-secret').value      = cfg.alpacaSecret
+    document.getElementById('paper-mode').value       = cfg.paper !== false ? 'paper' : 'live'
+    document.getElementById('alert-sound').checked    = cfg.alertSound !== false
+    document.getElementById('auto-send').checked      = cfg.autoSendEnabled === true
+    document.getElementById('default-strategy').value = cfg.defaultStrategy || 'regular'
+    document.getElementById('refresh-rate').value     = String(cfg.refreshMs || 1000)
+  }
+
+  function saveConfig() {
+    const paper = document.getElementById('paper-mode').value === 'paper'
+    window.copilot.saveConfig({
+      alpacaKey:       document.getElementById('api-key').value.trim(),
+      alpacaSecret:    document.getElementById('api-secret').value.trim(),
+      alpacaBaseUrl:   paper
+                         ? 'https://paper-api.alpaca.markets'
+                         : 'https://api.alpaca.markets',
+      alpacaDataUrl:   'https://data.alpaca.markets',
+      paper,
+      alertSound:      document.getElementById('alert-sound').checked,
+      autoSendEnabled: document.getElementById('auto-send').checked,
+      defaultStrategy: document.getElementById('default-strategy').value,
+      refreshMs:       parseInt(document.getElementById('refresh-rate').value)
+    })
+  }
+
+  function testConnection() {
+    const result = document.getElementById('test-result')
+    result.textContent = 'Testing...'
+    result.className   = ''
+    // Simple validation — real test happens when main process connects
+    const key    = document.getElementById('api-key').value.trim()
+    const secret = document.getElementById('api-secret').value.trim()
+    if (!key || !secret) {
+      result.textContent = '✗ Enter key and secret first'
+      result.className   = 'failed'
+      return
+    }
+    if (!key.startsWith('PK') && !key.startsWith('AK')) {
+      result.textContent = '✗ Key should start with PK or AK'
+      result.className   = 'failed'
+      return
+    }
+    result.textContent = '✓ Credentials look valid — save to connect'
+    result.className   = 'connected'
+  }
+
+  load()
+</script>
+</body>
+</html>
