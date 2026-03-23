@@ -56,8 +56,10 @@ function createConfigWindow() {
   }
 
   configWindow = new BrowserWindow({
-    width:  480,
-    height: 560,
+    width:     500,
+    height:    560,
+    minWidth:  500,
+    maxWidth:  500,
     title:  'Settings',
     parent: mainWindow,
     modal:  false,
@@ -79,10 +81,11 @@ function createConfigWindow() {
 
 // ── App lifecycle ──────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
-  createMainWindow()
-
-  // Init config manager first
+  // Init config FIRST before creating window
+  // (createMainWindow reads config for alwaysOnTop)
   ConfigManager.init()
+
+  createMainWindow()
 
   // Init Alpaca if credentials exist
   const config = ConfigManager.get()
@@ -142,6 +145,7 @@ function cleanup() {
 
 // Open config window
 ipcMain.on('app:openConfig', () => {
+  console.log('[Main] Opening config window')
   createConfigWindow()
 })
 

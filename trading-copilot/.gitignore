@@ -1,5 +1,6 @@
 node_modules/
 dist/
+pine_scripts/
 .env
 config/user-config.json
 *.log

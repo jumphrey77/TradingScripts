@@ -43,6 +43,8 @@ function resolvePlaceholders(template, state) {
     '[PNL]':     pnlStr,
     '[TIME]':    elapsed,
     '[RSI]':     fmtN(state.rsi),
+    '[RSI5]':    fmtN(state.rsi5m),
+    '[RSI15]':   fmtN(state.rsi15m),
     '[MACD]':    state.macd != null
                    ? (state.macd >= 0 ? '+' : '') + fmtN(state.macd, 4)
                    : 'N/A',

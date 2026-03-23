@@ -9,11 +9,15 @@
 const state = {
   ticker:    '',
   price:     null,
+  autoCopyOnSelect: true,
+  tradePresets:     [],
   bid:       null,
   ask:       null,
   spread:    null,
   spreadPct: null,
   rsi:       null,
+  rsi5m:     null,
+  rsi15m:    null,
   macd:      null,
   vwap:      null,
   volRatio:  null,
@@ -39,6 +43,13 @@ const $ = id => document.getElementById(id)
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 async function init() {
+  // Load autoCopyOnSelect from config
+  if (window.copilot && window.copilot.getConfig) {
+    const cfg = await window.copilot.getConfig()
+    state.autoCopyOnSelect = cfg.autoCopyOnSelect !== false
+    state.tradePresets     = cfg.tradePresets || []
+    renderPresets()
+  }
   bindControls()
   await loadMessages()
   startClock()
@@ -69,6 +80,21 @@ function bindControls() {
       if (state.ticker) window.copilot.unsubscribe(state.ticker)
       state.ticker = ticker
       state.bars   = []
+      state.price  = null
+      state.rsi    = null
+      state.macd   = null
+      state.vwap   = null
+      // Switch alert cache to new ticker
+      if (typeof AlertManager !== 'undefined') AlertManager.setTicker(ticker)
+      const tape = $('tape-container')
+      if (tape) tape.innerHTML = '<div class="no-tape">Waiting for data...</div>'
+      // Reset display
+      $('price-display').textContent = '$—'
+      $('price-display').className   = 'price-big'
+      $('rsi-val').textContent  = 'Loading...'
+      $('macd-val').textContent = '—'
+      $('vwap-val').textContent = '—'
+      $('bidask-val').textContent = '—'
       window.copilot.subscribe(ticker)
     }
   })
@@ -92,6 +118,10 @@ function bindControls() {
     if (!isNaN(val) && val > 0) {
       state.entry     = val
       state.entryTime = Date.now()
+      // Reset any active preset highlight — entry changed
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('preset-active'))
+      const rrRow = $('rr-row')
+      if (rrRow) rrRow.style.display = 'none'
       pushTradeContext()
       updatePnL()
     }
@@ -118,25 +148,21 @@ function bindControls() {
 
   // Config button
   $('config-btn').addEventListener('click', () => {
+    console.log('[Renderer] Config button clicked')
     window.copilot.openConfig()
   })
 
-  // Emergency exit
-  $('emergency-btn').addEventListener('click', () => {
-    sendMessageById('msg_015')
-  })
+  // Favorite buttons rendered dynamically — see renderFavorites()
 
-  // Move stop
-  $('move-stop-btn').addEventListener('click', () => {
-    sendMessageById('msg_008')
-  })
-
-  // Message dropdown
+  // Message dropdown — auto copy on select if enabled
   $('message-select').addEventListener('change', e => {
     updateMessagePreview(e.target.value)
+    if (state.autoCopyOnSelect && e.target.value) {
+      sendMessageById(e.target.value, true)
+    }
   })
 
-  // Send to Claude
+  // Send to Claude — manual re-copy
   $('send-claude-btn').addEventListener('click', () => {
     const msgId = $('message-select').value
     if (msgId) sendMessageById(msgId)
@@ -204,6 +230,13 @@ function pushTradeContext() {
 // ── Alpaca data listeners ──────────────────────────────────────────────────────
 function setupAlpacaListeners() {
 
+  // Set initial ticker in AlertManager once loaded
+  setTimeout(() => {
+    if (state.ticker && typeof AlertManager !== 'undefined') {
+      AlertManager.setTicker(state.ticker)
+    }
+  }, 500)
+
   window.copilot.onStatus(data => {
     state.connected = data.connected
     $('status-dot').className = 'status-dot ' + (data.connected ? 'connected' : 'disconnected')
@@ -226,6 +259,8 @@ function setupAlpacaListeners() {
 
   window.copilot.onIndicators(data => {
     state.rsi        = data.rsi
+    state.rsi5m      = data.rsi5m  || null
+    state.rsi15m     = data.rsi15m || null
     state.macd       = data.macd
     state.vwap       = data.vwap
     state.volRatio   = data.volRatio
@@ -251,7 +286,7 @@ function setupAlpacaListeners() {
 
 // ── Display updates ────────────────────────────────────────────────────────────
 function updatePriceDisplay() {
-  if (state.price === null) return
+  if (state.price === null || isNaN(state.price)) return
   const el     = $('price-display')
   const changeEl = $('change-display')
   el.textContent = `$${state.price.toFixed(3)}`
@@ -285,22 +320,42 @@ function updatePriceDisplay() {
 }
 
 function updateBidAsk() {
-  if (state.bid === null) return
-  $('bidask-val').textContent = `$${state.bid.toFixed(3)} / $${state.ask.toFixed(3)}`
-  $('spread-val').textContent = `$${state.spread.toFixed(4)} (${state.spreadPct.toFixed(1)}%)`
-  $('spread-val').className   = 'metric-val ' + (
-    state.spreadPct > 1.5 ? 'red' : state.spreadPct > 0.8 ? 'amber' : 'green'
-  )
+  if (state.bid === null || isNaN(state.bid)) return
+  if (state.spread === 0 || state.bid === state.ask) {
+    // Synthetic — only have last trade price
+    $('bidask-val').textContent = `$${state.bid.toFixed(3)} (last trade)`
+    $('spread-val').textContent = 'Live quote pending...'
+    $('spread-val').className   = 'metric-val muted'
+  } else {
+    $('bidask-val').textContent = `$${state.bid.toFixed(3)} / $${state.ask.toFixed(3)}`
+    $('spread-val').textContent = `$${state.spread.toFixed(4)} (${state.spreadPct.toFixed(1)}%)`
+    $('spread-val').className   = 'metric-val ' + (
+      state.spreadPct > 1.5 ? 'red' : state.spreadPct > 0.8 ? 'amber' : 'green'
+    )
+  }
 }
 
 function updateIndicators() {
-  const rsi  = state.rsi
-  const macd = state.macd
+  const rsi   = state.rsi
+  const rsi5m  = state.rsi5m
+  const rsi15m = state.rsi15m
+  const macd   = state.macd
 
-  if (rsi !== null) {
-    $('rsi-val').textContent = rsi.toFixed(1)
-    $('rsi-val').className   = 'metric-val ' + (rsi > 70 ? 'red' : rsi < 30 ? 'green' : 'amber')
+  const setRSI = (elId, val) => {
+    const el = $(elId)
+    if (!el) return
+    if (val !== null && !isNaN(val)) {
+      el.textContent = val.toFixed(1)
+      el.className   = 'metric-val ' + (val > 70 ? 'red' : val < 30 ? 'green' : 'amber')
+    } else {
+      el.textContent = '—'
+      el.className   = 'metric-val muted'
+    }
   }
+
+  setRSI('rsi-val',    rsi)
+  setRSI('rsi5m-val',  rsi5m)
+  setRSI('rsi15m-val', rsi15m)
 
   if (macd !== null) {
     const sign = macd >= 0 ? '+' : ''
@@ -399,6 +454,78 @@ function updateLevels() {
 }
 setInterval(updateLevels, 1000)
 
+// ── Trade presets ──────────────────────────────────────────────────────────────
+function renderPresets() {
+  const container = $('preset-btns')
+  if (!container) return
+  container.innerHTML = ''
+
+  const presets = state.tradePresets
+  if (!presets || presets.length === 0) return
+
+  presets.forEach((preset, i) => {
+    const btn = document.createElement('button')
+    btn.className       = 'btn preset-btn'
+    btn.dataset.index   = i
+    btn.innerHTML       = `
+      <span class="preset-name">${preset.name}</span>
+      <span class="preset-pcts">SL ${preset.sl}% · T1 ${preset.t1}% · T2 ${preset.t2}%</span>
+    `
+    btn.addEventListener('click', () => applyPreset(preset))
+    container.appendChild(btn)
+  })
+}
+
+function applyPreset(preset) {
+  if (!state.entry) {
+    showToast('Set entry price first')
+    return
+  }
+
+  const entry = state.entry
+  const stop  = parseFloat((entry * (1 - preset.sl  / 100)).toFixed(3))
+  const t1    = parseFloat((entry * (1 + preset.t1  / 100)).toFixed(3))
+  const t2    = parseFloat((entry * (1 + preset.t2  / 100)).toFixed(3))
+
+  // Update state
+  state.stop    = stop
+  state.target1 = t1
+  state.target2 = t2
+
+  // Update inputs
+  const stopIn = $('stop-input')
+  const t1In   = $('target1-input')
+  const t2In   = $('target2-input')
+  if (stopIn) stopIn.value = stop.toFixed(3)
+  if (t1In)   t1In.value   = t1.toFixed(3)
+  if (t2In)   t2In.value   = t2.toFixed(3)
+
+  // Update display
+  $('lv-stop').textContent = `$${stop.toFixed(3)}`
+
+  // Calculate and show R:R
+  const risk    = entry - stop
+  const reward  = t2    - entry
+  const rr      = risk > 0 ? (reward / risk).toFixed(1) : '—'
+  const rrRow   = $('rr-row')
+  const rrEl    = $('lv-rr')
+  if (rrRow) rrRow.style.display = ''
+  if (rrEl) {
+    rrEl.textContent = `1 : ${rr}  (risk $${risk.toFixed(3)} / reward $${reward.toFixed(3)})`
+    rrEl.className   = 'level-val ' + (parseFloat(rr) >= 2 ? 'green' : parseFloat(rr) >= 1 ? 'amber' : 'red')
+  }
+
+  // Push to main process
+  pushTradeContext()
+
+  // Visual feedback — highlight active preset
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('preset-active'))
+  const activeBtn = document.querySelector(`.preset-btn[data-index="${state.tradePresets.indexOf(preset)}"]`)
+  if (activeBtn) activeBtn.classList.add('preset-active')
+
+  showToast(`${preset.name} preset applied — SL $${stop.toFixed(3)} T1 $${t1.toFixed(3)} T2 $${t2.toFixed(3)}`)
+}
+
 // ── Message handling ───────────────────────────────────────────────────────────
 let allMessages = []
 
@@ -406,6 +533,59 @@ async function loadMessages() {
   const data = await window.copilot.getMessages()
   allMessages = data.messages || []
   filterMessages(state.mode, state.strategy)
+  renderFavorites()
+}
+
+function renderFavorites() {
+  const container = $('favorites-container')
+  if (!container) return
+  container.innerHTML = ''
+
+  const favs = allMessages.filter(m => m.favorite)
+  if (favs.length === 0) return
+
+  favs.forEach(msg => {
+    const btn = document.createElement('button')
+    btn.className = `btn fav-btn fav-${msg.buttonStyle || 'info'}`
+    btn.dataset.msgId = msg.id
+    btn.textContent   = msg.buttonText || msg.description
+    btn.title         = msg.description
+    btn.addEventListener('click', () => sendMessageById(msg.id))
+    container.appendChild(btn)
+  })
+}
+
+function sendAllAlerts() {
+  const container = $('alerts-container')
+  if (!container) return
+
+  const items = container.querySelectorAll('.alert-item')
+  if (items.length === 0) {
+    showToast('No alerts to send')
+    return
+  }
+
+  // Collect all unresolved alert templates
+  const lines = [`MULTIPLE ALERTS — ${state.ticker || 'N/A'} ${new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: true })}`]
+  lines.push('')
+
+  let count = 0
+  items.forEach((item, i) => {
+    const body = item.querySelector('.alert-body div:first-child')
+    if (body) {
+      lines.push(`[${i + 1}] ${body.textContent.trim()}`)
+      count++
+    }
+  })
+
+  lines.push('')
+  lines.push(`Strategy: ${state.strategy || 'N/A'} | Mode: ${state.mode || 'N/A'}`)
+  lines.push(`Price: ${state.price ? '$' + state.price.toFixed(3) : 'N/A'} | Entry: ${state.entry ? '$' + state.entry.toFixed(3) : 'N/A'} | RSI: ${state.rsi || 'N/A'} | VWAP: ${state.vwap ? '$' + state.vwap.toFixed(3) : 'N/A'}`)
+  lines.push('Is thesis intact or immediate action needed?')
+
+  navigator.clipboard.writeText(lines.join('\n')).then(() => {
+    showToast(`${count} alerts copied — Ctrl+V into Claude chat`)
+  })
 }
 
 function filterMessages(mode, strategy) {
@@ -446,18 +626,59 @@ function updateMessagePreview(msgId) {
   const msg = allMessages.find(m => m.id === msgId)
   if (!msg) return
   const resolved = resolvePlaceholders(msg.template, state)
-  $('msg-preview').textContent = resolved
+  // Highlight resolved token values — find what changed from template
+  const highlighted = highlightTokenValues(msg.template, resolved)
+  $('msg-preview').innerHTML = highlighted
   $('msg-preview').classList.remove('hidden')
   $('send-claude-btn').disabled = false
 }
 
-function sendMessageById(msgId) {
+function highlightTokenValues(template, resolved) {
+  // Find all placeholder positions in template and mark resolved values
+  const tokenRegex = /\[([A-Z0-9_]+)\]/g
+  let result = resolved
+  // Escape HTML first
+  result = result.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  // Now highlight values that replaced tokens — we do this by resolving
+  // each token individually and wrapping in a span
+  const tokens = [...template.matchAll(tokenRegex)].map(m => m[0])
+  const unique  = [...new Set(tokens)]
+  unique.forEach(token => {
+    const val = resolvePlaceholders(token, state)
+    if (val && val !== 'N/A' && val !== token) {
+      const escaped = val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const safe    = val.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      result = result.replace(
+        new RegExp(escaped.replace(/&/g,'&amp;'), 'g'),
+        `<span class="token-val">${safe}</span>`
+      )
+    }
+  })
+  return result
+}
+
+function sendMessageById(msgId, silent = false) {
   const msg = allMessages.find(m => m.id === msgId)
   if (!msg) return
   const resolved = resolvePlaceholders(msg.template, state)
-  // Copy to clipboard for paste into Claude chat
   navigator.clipboard.writeText(resolved).then(() => {
-    showToast('Copied to clipboard — Ctrl+V into Claude chat')
+    if (!silent) {
+      showToast('Copied — Ctrl+V into Claude chat')
+    } else {
+      showToast('Auto-copied — Ctrl+V into Claude chat')
+    }
+    // Mark as sent in UI
+    markAlertsSent(msgId)
+  })
+}
+
+function markAlertsSent(msgId) {
+  // Visual feedback on favorite buttons
+  document.querySelectorAll('.fav-btn').forEach(btn => {
+    if (btn.dataset.msgId === msgId) {
+      btn.classList.add('fav-sent')
+      setTimeout(() => btn.classList.remove('fav-sent'), 2000)
+    }
   })
 }
 

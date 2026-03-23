@@ -5,189 +5,328 @@
   <title>Settings</title>
   <style>
     :root {
-      --bg:     #0d0f11;
-      --bg2:    #151820;
-      --bg3:    #1c2028;
-      --border: rgba(255,255,255,0.1);
-      --text:   #e8eaf0;
-      --muted:  #6b7280;
-      --green:  #22c55e;
-      --red:    #ef4444;
-      --blue:   #3b82f6;
-      --blue-bg:rgba(59,130,246,0.1);
-      --blue-b: rgba(59,130,246,0.25);
-      --font:   'JetBrains Mono','Fira Code','Consolas',monospace;
+      --bg:      #0d0f11;
+      --bg2:     #151820;
+      --bg3:     #1c2028;
+      --border:  rgba(255,255,255,0.08);
+      --border2: rgba(255,255,255,0.14);
+      --text:    #e8eaf0;
+      --muted:   #6b7280;
+      --green:   #22c55e;
+      --red:     #ef4444;
+      --amber:   #f59e0b;
+      --blue:    #3b82f6;
+      --blue-bg: rgba(59,130,246,0.1);
+      --blue-b:  rgba(59,130,246,0.25);
+      --font:    'JetBrains Mono','Fira Code','Consolas',monospace;
+      --radius:  6px;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 12px; padding: 20px; }
-    h2 { font-size: 14px; font-weight: 600; margin-bottom: 20px; color: var(--text); letter-spacing: 0.04em; }
-    .section { margin-bottom: 20px; }
-    .section-title { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; border-bottom: 0.5px solid var(--border); padding-bottom: 5px; }
-    .field { margin-bottom: 10px; }
-    label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: var(--font); font-size: 12px;
+      width: 480px; height: 520px;
+      overflow: hidden; display: flex; flex-direction: column;
+    }
+    .header { padding: 14px 16px 0; border-bottom: 0.5px solid var(--border); }
+    .header h2 { font-size: 13px; font-weight: 600; letter-spacing: 0.04em; margin-bottom: 12px; }
+    .tabs { display: flex; gap: 2px; }
+    .tab {
+      font-family: var(--font); font-size: 11px; padding: 6px 14px;
+      background: transparent; border: none; border-bottom: 2px solid transparent;
+      color: var(--muted); cursor: pointer; transition: color 0.15s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+    .tab-body { flex: 1; overflow: hidden; }
+    .tab-panel { display: none; padding: 16px; height: 100%; }
+    .tab-panel.active { display: block; }
+    .field { margin-bottom: 12px; }
+    label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
     input[type="text"], input[type="password"], select {
       width: 100%; font-family: var(--font); font-size: 12px; color: var(--text);
-      background: var(--bg2); border: 0.5px solid rgba(255,255,255,0.12);
-      border-radius: 5px; padding: 7px 9px;
+      background: var(--bg2); border: 0.5px solid var(--border2); border-radius: var(--radius); padding: 7px 9px;
     }
     input:focus, select:focus { outline: none; border-color: var(--blue); }
-    .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 0.5px solid var(--border); }
+    .toggle-row:last-child { border-bottom: none; }
     .toggle-label { font-size: 11px; color: var(--text); }
-    .toggle { position: relative; width: 36px; height: 20px; }
+    .toggle-hint  { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
     .toggle input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; inset: 0; background: var(--bg3); border-radius: 20px; cursor: pointer; border: 0.5px solid var(--border); transition: 0.2s; }
+    .slider { position: absolute; inset: 0; background: var(--bg3); border-radius: 20px; cursor: pointer; border: 0.5px solid var(--border2); transition: 0.2s; }
     .slider:before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; bottom: 2px; background: var(--muted); border-radius: 50%; transition: 0.2s; }
     input:checked + .slider { background: var(--blue-bg); border-color: var(--blue-b); }
     input:checked + .slider:before { transform: translateX(16px); background: var(--blue); }
-    .btn-row { display: flex; gap: 8px; margin-top: 24px; }
-    .btn { flex: 1; font-family: var(--font); font-size: 12px; padding: 9px; border-radius: 5px; cursor: pointer; }
+    .test-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .test-btn { padding: 7px 12px; font-family: var(--font); font-size: 11px; background: var(--bg3); border: 0.5px solid var(--border2); color: var(--muted); border-radius: var(--radius); cursor: pointer; white-space: nowrap; flex-shrink: 0; }
+    .test-btn:hover { color: var(--text); }
+    #test-result { font-size: 10px; }
+    .ok   { color: var(--green); }
+    .fail { color: var(--red); }
+    .footer { display: flex; gap: 8px; padding: 12px 16px; border-top: 0.5px solid var(--border); flex-shrink: 0; }
+    .btn { flex: 1; font-family: var(--font); font-size: 12px; padding: 9px; border-radius: var(--radius); cursor: pointer; }
     .btn-save { background: var(--blue-bg); border: 0.5px solid var(--blue-b); color: var(--blue); }
     .btn-save:hover { background: rgba(59,130,246,0.2); }
-    .btn-cancel { background: var(--bg2); border: 0.5px solid var(--border); color: var(--muted); }
+    .btn-cancel { background: var(--bg2); border: 0.5px solid var(--border2); color: var(--muted); }
     .btn-cancel:hover { color: var(--text); }
-    .test-row { display: flex; gap: 6px; align-items: center; }
-    .test-row input { flex: 1; }
-    .test-btn { padding: 7px 12px; font-family: var(--font); font-size: 11px; background: var(--bg3); border: 0.5px solid var(--border); color: var(--muted); border-radius: 5px; cursor: pointer; white-space: nowrap; }
-    .test-btn:hover { color: var(--text); }
-    #test-result { font-size: 10px; margin-top: 5px; }
-    .connected { color: var(--green); }
-    .failed    { color: var(--red); }
+    .section-title { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 0.5px solid var(--border); }
+    .section-gap { margin-top: 14px; }
   </style>
 </head>
 <body>
 
-  <h2>⚙ Settings</h2>
-
-  <div class="section">
-    <div class="section-title">Alpaca Connection</div>
-
-    <div class="field">
-      <label>API Key ID</label>
-      <input type="text" id="api-key" placeholder="PKxxxxxxxxxxxxxxxxxxxx"/>
-    </div>
-
-    <div class="field">
-      <label>Secret Key</label>
-      <input type="password" id="api-secret" placeholder="••••••••••••••••••••"/>
-    </div>
-
-    <div class="field">
-      <label>Mode</label>
-      <select id="paper-mode">
-        <option value="paper">Paper Trading</option>
-        <option value="live">Live Trading</option>
-      </select>
-    </div>
-
-    <div class="test-row">
-      <button class="test-btn" onclick="testConnection()">Test Connection</button>
-      <div id="test-result"></div>
+  <div class="header">
+    <h2>⚙ Settings</h2>
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('alpaca')">Alpaca</button>
+      <button class="tab"        onclick="switchTab('app')">App</button>
+      <button class="tab"        onclick="switchTab('messages')">Messages</button>
+      <button class="tab"        onclick="switchTab('presets')">Presets</button>
     </div>
   </div>
 
-  <div class="section">
-    <div class="section-title">App Settings</div>
+  <div class="tab-body">
 
-    <div class="toggle-row">
-      <span class="toggle-label">Always on top</span>
-      <label class="toggle">
-        <input type="checkbox" id="always-on-top"/>
-        <span class="slider"></span>
-      </label>
+    <!-- Tab 1: Alpaca -->
+    <div id="tab-alpaca" class="tab-panel active">
+      <div class="section-title">API Credentials</div>
+      <div class="field">
+        <label>API Key ID</label>
+        <input type="text" id="api-key" placeholder="PKxxxxxxxxxxxxxxxxxxxx" autocomplete="off"/>
+      </div>
+      <div class="field">
+        <label>Secret Key</label>
+        <input type="password" id="api-secret" placeholder="Your secret key" autocomplete="off"/>
+      </div>
+      <div class="field">
+        <label>Trading Mode</label>
+        <select id="paper-mode">
+          <option value="paper">Paper Trading  (safe — recommended)</option>
+          <option value="live">Live Trading  (real money)</option>
+        </select>
+      </div>
+      <div class="test-row">
+        <button class="test-btn" onclick="testConnection()">Test Connection</button>
+        <div id="test-result"></div>
+      </div>
     </div>
 
-    <div class="toggle-row">
-      <span class="toggle-label">Alert sounds</span>
-      <label class="toggle">
-        <input type="checkbox" id="alert-sound" checked/>
-        <span class="slider"></span>
-      </label>
+    <!-- Tab 2: App Settings -->
+    <div id="tab-app" class="tab-panel">
+      <div class="section-title">Display</div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">Always on top</div><div class="toggle-hint">Float panel above other windows</div></div>
+        <label class="toggle"><input type="checkbox" id="always-on-top"/><span class="slider"></span></label>
+      </div>
+
+      <div class="section-title section-gap">Behavior</div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">Auto-copy on message select</div><div class="toggle-hint">Copies to clipboard when dropdown changes</div></div>
+        <label class="toggle"><input type="checkbox" id="auto-copy-select" checked/><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">Alert sounds</div><div class="toggle-hint">Beep on warning and danger alerts</div></div>
+        <label class="toggle"><input type="checkbox" id="alert-sound" checked/><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">Auto-send alerts to Claude</div><div class="toggle-hint">Phase 2 — not yet available</div></div>
+        <label class="toggle"><input type="checkbox" id="auto-send" disabled/><span class="slider"></span></label>
+      </div>
+
+      <div class="section-title section-gap">Defaults</div>
+      <div class="field-row">
+        <div class="field">
+          <label>Default strategy</label>
+          <select id="default-strategy">
+            <option value="regular">Regular</option>
+            <option value="scalp">Scalp</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Data refresh</label>
+          <select id="refresh-rate">
+            <option value="1000">1 second</option>
+            <option value="2000">2 seconds</option>
+            <option value="5000">5 seconds</option>
+          </select>
+        </div>
+      </div>
     </div>
 
-    <div class="toggle-row">
-      <span class="toggle-label">Auto-send alerts to Claude</span>
-      <label class="toggle">
-        <input type="checkbox" id="auto-send"/>
-        <span class="slider"></span>
-      </label>
+    <!-- Tab 3: Messages -->
+    <div id="tab-messages" class="tab-panel">
+      <div class="section-title">Alert Cache</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid var(--border);margin-bottom:14px;">
+        <div>
+          <div class="toggle-label">Clear all alerts</div>
+          <div class="toggle-hint">Removes all cached alerts for all tickers</div>
+        </div>
+        <button class="test-btn" id="clear-alerts-btn" onclick="clearAllAlerts()" style="color:var(--red);border-color:rgba(239,68,68,0.3);">
+          Clear All
+        </button>
+      </div>
+
+      <div class="section-title">Message File</div>
+      <p style="font-size:11px;color:var(--muted);line-height:1.7;margin-bottom:14px;">
+        All messages and alerts are stored in:<br/>
+        <span style="color:var(--text);">data/claude_messages.json</span><br/>
+        Edit this file in VS Code to customize.
+      </p>
+
+      <div class="section-title">Available Placeholders</div>
+      <p style="font-size:11px;color:var(--amber);line-height:1.9;">
+        [T] [P] [E] [S] [TG1] [TG2] [PNL]<br/>
+        [TIME] [RSI] [MACD] [VWAP] [VOL]<br/>
+        [SPREAD] [TAPE] [STRAT] [TIME_ET]<br/>
+        [BID] [ASK] [HIGH] [LOW] [PREMP]
+      </p>
+
+      <div class="section-title section-gap">Favorite Buttons</div>
+      <p style="font-size:11px;color:var(--muted);line-height:1.7;">
+        To add a quick-send button, set in JSON:<br/>
+        <span style="color:var(--text);">
+          "favorite": true,<br/>
+          "buttonText": "My Label",<br/>
+          "buttonStyle": "danger | warning | info"
+        </span>
+      </p>
     </div>
 
-    <div class="field" style="margin-top:10px;">
-      <label>Default strategy</label>
-      <select id="default-strategy">
-        <option value="regular">Regular</option>
-        <option value="scalp">Scalp</option>
-      </select>
+    <!-- Tab 4: Presets -->
+    <div id="tab-presets" class="tab-panel">
+      <div class="section-title">Trade Level Presets</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.6;">
+        Click a preset in the panel to auto-calculate stop loss and targets from entry price.
+      </p>
+      <div id="presets-list"></div>
+      <button class="test-btn" onclick="addPreset()" style="margin-top:10px;width:100%;text-align:center;">
+        + Add Preset
+      </button>
     </div>
 
-    <div class="field">
-      <label>Data refresh rate</label>
-      <select id="refresh-rate">
-        <option value="1000">1 second</option>
-        <option value="2000">2 seconds</option>
-        <option value="5000">5 seconds</option>
-      </select>
-    </div>
   </div>
 
-  <div class="btn-row">
+  <div class="footer">
     <button class="btn btn-cancel" onclick="window.close()">Cancel</button>
-    <button class="btn btn-save" onclick="saveConfig()">Save & Connect</button>
+    <button class="btn btn-save"   onclick="saveConfig()">Save &amp; Apply</button>
   </div>
 
 <script>
+  function switchTab(name) {
+    const names = ['alpaca','app','messages','presets']
+    document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', names[i] === name))
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name))
+    if (name === 'presets') renderPresetsList()
+  }
+
   async function load() {
     const cfg = await window.copilot.getConfig()
-    if (cfg.alpacaKey)    document.getElementById('api-key').value         = cfg.alpacaKey
-    if (cfg.alpacaSecret) document.getElementById('api-secret').value      = cfg.alpacaSecret
-    document.getElementById('paper-mode').value       = cfg.paper !== false ? 'paper' : 'live'
-    document.getElementById('always-on-top').checked  = cfg.alwaysOnTop === true
-    document.getElementById('alert-sound').checked    = cfg.alertSound !== false
-    document.getElementById('auto-send').checked      = cfg.autoSendEnabled === true
-    document.getElementById('default-strategy').value = cfg.defaultStrategy || 'regular'
-    document.getElementById('refresh-rate').value     = String(cfg.refreshMs || 1000)
+    if (cfg.alpacaKey)    document.getElementById('api-key').value               = cfg.alpacaKey
+    if (cfg.alpacaSecret) document.getElementById('api-secret').value            = cfg.alpacaSecret
+    document.getElementById('paper-mode').value         = cfg.paper !== false ? 'paper' : 'live'
+    document.getElementById('always-on-top').checked    = cfg.alwaysOnTop === true
+    document.getElementById('auto-copy-select').checked = cfg.autoCopyOnSelect !== false
+    document.getElementById('alert-sound').checked      = cfg.alertSound !== false
+    document.getElementById('auto-send').checked        = cfg.autoSendEnabled === true
+    document.getElementById('default-strategy').value   = cfg.defaultStrategy || 'regular'
+    document.getElementById('refresh-rate').value       = String(cfg.refreshMs || 1000)
+    presets = cfg.tradePresets || []
   }
 
   function saveConfig() {
     const paper = document.getElementById('paper-mode').value === 'paper'
     window.copilot.saveConfig({
-      alpacaKey:       document.getElementById('api-key').value.trim(),
-      alpacaSecret:    document.getElementById('api-secret').value.trim(),
-      alpacaBaseUrl:   paper
-                         ? 'https://paper-api.alpaca.markets'
-                         : 'https://api.alpaca.markets',
-      alpacaDataUrl:   'https://data.alpaca.markets',
+      alpacaKey:        document.getElementById('api-key').value.trim(),
+      alpacaSecret:     document.getElementById('api-secret').value.trim(),
+      alpacaBaseUrl:    paper ? 'https://paper-api.alpaca.markets' : 'https://api.alpaca.markets',
+      alpacaDataUrl:    'https://data.alpaca.markets',
       paper,
-      alwaysOnTop:     document.getElementById('always-on-top').checked,
-      alertSound:      document.getElementById('alert-sound').checked,
-      autoSendEnabled: document.getElementById('auto-send').checked,
-      defaultStrategy: document.getElementById('default-strategy').value,
-      refreshMs:       parseInt(document.getElementById('refresh-rate').value)
+      alwaysOnTop:      document.getElementById('always-on-top').checked,
+      autoCopyOnSelect: document.getElementById('auto-copy-select').checked,
+      alertSound:       document.getElementById('alert-sound').checked,
+      autoSendEnabled:  document.getElementById('auto-send').checked,
+      defaultStrategy:  document.getElementById('default-strategy').value,
+      refreshMs:        parseInt(document.getElementById('refresh-rate').value),
+      tradePresets:     presets
     })
   }
 
   function testConnection() {
     const result = document.getElementById('test-result')
-    result.textContent = 'Testing...'
-    result.className   = ''
-    // Simple validation — real test happens when main process connects
     const key    = document.getElementById('api-key').value.trim()
     const secret = document.getElementById('api-secret').value.trim()
-    if (!key || !secret) {
-      result.textContent = '✗ Enter key and secret first'
-      result.className   = 'failed'
-      return
-    }
-    if (!key.startsWith('PK') && !key.startsWith('AK')) {
-      result.textContent = '✗ Key should start with PK or AK'
-      result.className   = 'failed'
-      return
-    }
-    result.textContent = '✓ Credentials look valid — save to connect'
-    result.className   = 'connected'
+    result.className = ''
+    if (!key || !secret) { result.textContent = '✗ Enter key and secret first'; result.className = 'fail'; return }
+    if (!key.startsWith('PK') && !key.startsWith('AK')) { result.textContent = '✗ Key should start with PK or AK'; result.className = 'fail'; return }
+    result.textContent = '✓ Looks valid — save to connect'
+    result.className   = 'ok'
   }
 
   load()
+
+  // ── Presets ────────────────────────────────────────────────────────────────
+  let presets = []
+
+  function renderPresetsList() {
+    const list = document.getElementById('presets-list')
+    if (!list) return
+    list.innerHTML = presets.map((p, i) => `
+      <div style="background:var(--bg2);border:0.5px solid var(--border2);border-radius:6px;padding:10px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <input value="${p.name}" onchange="presets[${i}].name=this.value"
+            style="font-family:var(--font);font-size:12px;color:var(--text);background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:3px 7px;width:140px;"/>
+          <button onclick="removePreset(${i})" style="font-size:11px;color:var(--red);background:transparent;border:none;cursor:pointer;">Remove</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+          <div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;">Stop Loss %</div>
+            <input type="number" step="0.5" value="${p.sl}" onchange="presets[${i}].sl=parseFloat(this.value)"
+              style="font-family:var(--font);font-size:12px;color:var(--red);background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:4px 7px;width:100%;"/>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;">Target 1 %</div>
+            <input type="number" step="0.5" value="${p.t1}" onchange="presets[${i}].t1=parseFloat(this.value)"
+              style="font-family:var(--font);font-size:12px;color:var(--green);background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:4px 7px;width:100%;"/>
+          </div>
+          <div>
+            <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;">Target 2 %</div>
+            <input type="number" step="0.5" value="${p.t2}" onchange="presets[${i}].t2=parseFloat(this.value)"
+              style="font-family:var(--font);font-size:12px;color:var(--green);background:var(--bg3);border:0.5px solid var(--border2);border-radius:4px;padding:4px 7px;width:100%;"/>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px;">
+          R:R = 1 : ${p.sl > 0 ? (p.t2 / p.sl).toFixed(1) : '—'}
+        </div>
+      </div>
+    `).join('')
+  }
+
+  function addPreset() {
+    presets.push({ name: 'New Preset', sl: 2.0, t1: 3.0, t2: 6.0 })
+    renderPresetsList()
+  }
+
+  function removePreset(i) {
+    presets.splice(i, 1)
+    renderPresetsList()
+  }
+
+  function clearAllAlerts() {
+    try {
+      localStorage.removeItem('alertCache')
+      const btn = document.getElementById('clear-alerts-btn')
+      btn.textContent = 'Cleared!'
+      btn.style.color = 'var(--green)'
+      setTimeout(() => {
+        btn.textContent = 'Clear All'
+        btn.style.color = 'var(--red)'
+      }, 2000)
+    } catch(e) {
+      console.error('Failed to clear alerts:', e)
+    }
+  }
 </script>
 </body>
 </html>

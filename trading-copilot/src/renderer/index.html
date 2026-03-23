@@ -62,12 +62,24 @@
         </div>
       </div>
 
-      <!-- Indicators grid -->
+      <!-- RSI multi-timeframe row -->
       <div class="grid3">
         <div class="metric">
           <div class="metric-label">RSI 1m</div>
           <div id="rsi-val" class="metric-val">—</div>
         </div>
+        <div class="metric">
+          <div class="metric-label">RSI 5m</div>
+          <div id="rsi5m-val" class="metric-val">—</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">RSI 15m</div>
+          <div id="rsi15m-val" class="metric-val">—</div>
+        </div>
+      </div>
+
+      <!-- MACD and VWAP row -->
+      <div class="grid2">
         <div class="metric">
           <div class="metric-label">MACD</div>
           <div id="macd-val" class="metric-val">—</div>
@@ -148,7 +160,15 @@
             <span class="level-lbl">P&amp;L</span>
             <span id="lv-pnl" class="level-val">—</span>
           </div>
+          <div class="level-row" id="rr-row" style="display:none;">
+            <span class="level-lbl">Risk / Reward</span>
+            <span id="lv-rr" class="level-val">—</span>
+          </div>
         </div>
+
+        <!-- Preset buttons -->
+        <div class="section-label" style="margin-top:8px;">Quick set levels</div>
+        <div id="preset-btns" class="preset-container"></div>
       </div>
 
       <!-- Exit plan (exit mode) -->
@@ -201,15 +221,20 @@
         <div id="msg-preview" class="msg-preview hidden">—</div>
         <div class="msg-btn-row">
           <button id="send-claude-btn" class="btn btn-claude" disabled>Send ↗</button>
-          <button id="edit-msg-btn" class="btn">Edit</button>
         </div>
       </div>
 
-      <!-- Action buttons -->
-      <div class="btn-row">
-        <button id="emergency-btn" class="btn btn-exit">emergency exit</button>
-        <button id="move-stop-btn" class="btn">move stop</button>
+      <!-- Send All Alerts -->
+      <div id="send-all-row" class="send-all-row hidden">
+        <button onclick="sendAllAlerts()" class="btn btn-send-all">
+          Send All Alerts ↗
+        </button>
       </div>
+
+      <!-- Favorite message buttons (dynamic from JSON) -->
+      <hr class="divider"/>
+      <div class="section-label">quick send</div>
+      <div id="favorites-container" class="favorites-container"></div>
 
     </div><!-- /#main-panel -->
 
