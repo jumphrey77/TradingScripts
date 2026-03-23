@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('copilot', {
   getMessages:  ()         => ipcRenderer.invoke('messages:get'),
   saveMessages: (messages) => ipcRenderer.send('messages:save', messages),
 
+  // ── Window ─────────────────────────────────────────────────────────────────
+  setAlwaysOnTop: (val) => ipcRenderer.send('app:setAlwaysOnTop', val),
+
   // ── Cleanup ─────────────────────────────────────────────────────────────────
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
 })

@@ -415,7 +415,8 @@ function filterMessages(mode, strategy) {
 
   allMessages
     .filter(m => {
-      const modeOk     = !m.mode || m.mode.includes(mode) || mode === 'off'
+      // When mode is 'off' show all messages so user can still browse/send
+      const modeOk     = mode === 'off' || !m.mode || m.mode.includes(mode)
       const strategyOk = !m.strategy || m.strategy === 'all' || m.strategy === strategy
       return modeOk && strategyOk
     })

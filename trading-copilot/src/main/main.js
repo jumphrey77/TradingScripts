@@ -17,10 +17,13 @@ let alpacaService = null
 
 // ── Create main trading panel window ──────────────────────────────────────────
 function createMainWindow() {
+  const config = ConfigManager.get()
+
   mainWindow = new BrowserWindow({
-    width:  380,
-    height: 900,
-    minWidth: 340,
+    width:     380,
+    height:    900,
+    minWidth:  380,
+    maxWidth:  380,
     minHeight: 600,
     title: 'Trading Copilot',
     webPreferences: {
@@ -28,8 +31,7 @@ function createMainWindow() {
       contextIsolation: true,
       nodeIntegration: false
     },
-    // Stays on top of Robinhood/broker window
-    alwaysOnTop: false,
+    alwaysOnTop: config.alwaysOnTop === true,
     frame: true,
     resizable: true
   })
@@ -161,10 +163,20 @@ ipcMain.on('trade:setContext', (event, context) => {
 // Save config from config window
 ipcMain.on('config:save', (event, config) => {
   ConfigManager.save(config)
+  // Apply alwaysOnTop immediately without restart
+  if (mainWindow) mainWindow.setAlwaysOnTop(config.alwaysOnTop === true)
   // Restart Alpaca with new credentials
   cleanup()
   startAlpaca(config)
   if (configWindow) configWindow.close()
+})
+
+// Toggle alwaysOnTop live from renderer
+ipcMain.on('app:setAlwaysOnTop', (event, value) => {
+  if (mainWindow) mainWindow.setAlwaysOnTop(value)
+  const config = ConfigManager.get()
+  config.alwaysOnTop = value
+  ConfigManager.save(config)
 })
 
 // Get current config (for config window to populate)

@@ -89,6 +89,14 @@
     <div class="section-title">App Settings</div>
 
     <div class="toggle-row">
+      <span class="toggle-label">Always on top</span>
+      <label class="toggle">
+        <input type="checkbox" id="always-on-top"/>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="toggle-row">
       <span class="toggle-label">Alert sounds</span>
       <label class="toggle">
         <input type="checkbox" id="alert-sound" checked/>
@@ -133,6 +141,7 @@
     if (cfg.alpacaKey)    document.getElementById('api-key').value         = cfg.alpacaKey
     if (cfg.alpacaSecret) document.getElementById('api-secret').value      = cfg.alpacaSecret
     document.getElementById('paper-mode').value       = cfg.paper !== false ? 'paper' : 'live'
+    document.getElementById('always-on-top').checked  = cfg.alwaysOnTop === true
     document.getElementById('alert-sound').checked    = cfg.alertSound !== false
     document.getElementById('auto-send').checked      = cfg.autoSendEnabled === true
     document.getElementById('default-strategy').value = cfg.defaultStrategy || 'regular'
@@ -149,6 +158,7 @@
                          : 'https://api.alpaca.markets',
       alpacaDataUrl:   'https://data.alpaca.markets',
       paper,
+      alwaysOnTop:     document.getElementById('always-on-top').checked,
       alertSound:      document.getElementById('alert-sound').checked,
       autoSendEnabled: document.getElementById('auto-send').checked,
       defaultStrategy: document.getElementById('default-strategy').value,
