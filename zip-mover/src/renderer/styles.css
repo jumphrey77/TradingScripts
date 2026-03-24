@@ -1623,3 +1623,30 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ─── Fix: font descender clipping (Syne 'g', 'p', 'y' etc.) ─────────────── */
+/* Syne has tall descenders — ensure line-height never clips them              */
+
+body, button, input, .project-card-name, .logo-text,
+.detail-card-title, .settings-section-title,
+.alert-title, .run-summary-title, .modal-header h2,
+.page-header h1, .setup-card h2 {
+  line-height: 1.4;
+  overflow: visible;
+}
+
+.sidebar-header, .detail-card-header, .run-summary-header,
+.modal-header, .page-header {
+  overflow: visible;
+}
+
+/* ─── Last Run stat — smaller font to fit date + time ────────────────────── */
+
+.stat-value-sm {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px !important;
+  color: var(--text-primary);
+  line-height: 1.4;
+  white-space: nowrap;
+}

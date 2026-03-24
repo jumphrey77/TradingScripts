@@ -169,6 +169,21 @@ ipcMain.handle('open-root-folder', async () => {
   }
 });
 
+// Open the run_log.json file for a project in the default app (e.g. VS Code / Notepad)
+ipcMain.handle('open-run-log', async (event, { name }) => {
+  try {
+    const project = projectManager.getAllProjects().find(p => p.name === name);
+    if (!project) throw new Error('Project not found');
+    const logPath = require('path').join(project.projectDir, 'run_log.json');
+    const exists = await fs.pathExists(logPath);
+    if (!exists) return { success: false, error: 'No run log found yet.' };
+    await shell.openPath(logPath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
 // ─── IPC: Projects ───────────────────────────────────────────────────────────
 
 ipcMain.handle('scan-root-folders', async (event, { destinationRoot }) => {

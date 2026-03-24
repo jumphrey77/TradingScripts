@@ -159,7 +159,7 @@ function renderDashboard() {
             <div class="stat-label">Runs</div>
           </div>
           <div class="stat">
-            <div class="stat-value">${lastRun ? formatDate(lastRun.finishedAt).split(' ')[0] : '—'}</div>
+            <div class="stat-value stat-value-sm">${lastRun ? formatDate(lastRun.finishedAt) : '—'}</div>
             <div class="stat-label">Last Run</div>
           </div>
         </div>
@@ -402,7 +402,10 @@ function renderProjectDetail(details) {
   // Run log
   const runLogHtml = `
     <div class="detail-card">
-      <div class="detail-card-header"><div class="detail-card-title">RUN HISTORY</div></div>
+      <div class="detail-card-header">
+        <div class="detail-card-title">RUN HISTORY</div>
+        ${runLog.length > 0 ? '<button class="btn-secondary" style="font-size:11px;padding:4px 10px" id="btnViewLog">&#x1F4CB; View Log File</button>' : ''}
+      </div>
       <div class="detail-card-body" style="max-height:360px;overflow-y:auto">
         ${runLog.length === 0
           ? '<div style="color:var(--text-muted);font-size:12px">No runs yet. Drop a zip into this project folder.</div>'
@@ -472,6 +475,12 @@ function renderProjectDetail(details) {
 
   // Rebuild map button in detail
   $('btnRebuildMapDetail').addEventListener('click', () => rebuildMap(details.name));
+
+  // View log button (only rendered when runs exist)
+  const btnViewLog = $('btnViewLog');
+  if (btnViewLog) {
+    btnViewLog.addEventListener('click', () => zm.openRunLog(details.name));
+  }
 }
 
 // ─── Map Entry Editor ─────────────────────────────────────────────────────────
@@ -918,6 +927,50 @@ async function confirmSetup() {
   showView('viewDashboard');
 }
 
+// ─── Processing / Completion Alert ───────────────────────────────────────────
+
+function showProcessingAlert(projectName, zipName) {
+  els.alertBanner.className = 'alert-banner alert-info';
+  els.alertBanner.innerHTML = `
+    <div class="alert-icon">📦</div>
+    <div class="alert-body">
+      <div class="alert-title">Zip Detected — ${escapeHtml(projectName)}</div>
+      <div class="alert-message processing-msg">Processing <strong>${escapeHtml(zipName)}</strong>…</div>
+    </div>
+  `;
+  els.alertBanner.style.display = 'flex';
+  els.alertBanner.dataset.processingProject = projectName;
+}
+
+function resolveProcessingAlert(projectName, result) {
+  // Only update if the banner is still showing the processing state for this project
+  const isMatch = els.alertBanner.dataset.processingProject === projectName;
+  const isProcessingMsg = els.alertBanner.querySelector('.processing-msg');
+
+  const statusIcon  = result.status === 'success' ? '✅' : result.status === 'completed_with_errors' ? '⚠' : '✗';
+  const statusClass = result.status === 'success' ? 'alert-success' : result.status === 'completed_with_errors' ? 'alert-warning' : 'alert-danger';
+  const statusText  = result.status === 'success' ? 'Complete' : result.status === 'completed_with_errors' ? 'Complete with warnings' : 'Failed';
+  const summary     = `${result.filesDeployed.length} deployed` +
+    (result.filesUnmatched.length ? `, ${result.filesUnmatched.length} unmatched` : '') +
+    (result.errors.length ? `, ${result.errors.length} error(s)` : '');
+
+  els.alertBanner.className = `alert-banner ${statusClass}`;
+  els.alertBanner.innerHTML = `
+    <div class="alert-icon">${statusIcon}</div>
+    <div class="alert-body">
+      <div class="alert-title">${statusText} — ${escapeHtml(projectName)} — Run #${result.runNumber}</div>
+      <div class="alert-message">${escapeHtml(result.zipName)} · ${summary}</div>
+    </div>
+    <button class="alert-dismiss" id="alertDismiss" title="Dismiss">✕</button>
+  `;
+  els.alertBanner.style.display = 'flex';
+  delete els.alertBanner.dataset.processingProject;
+
+  $('alertDismiss').addEventListener('click', () => {
+    els.alertBanner.style.display = 'none';
+  });
+}
+
 // ─── Event Bindings ───────────────────────────────────────────────────────────
 
 function bindEvents() {
@@ -1039,8 +1092,7 @@ function bindEvents() {
 
   zm.onWatcherEvent(evt => {
     if (evt.type === 'zip-detected') {
-      showAlert('alert-info', `📦 Zip Detected — ${evt.projectName}`, `Processing <strong>${escapeHtml(evt.zipName)}</strong>…`, false);
-      // Update watcher status
+      showProcessingAlert(evt.projectName, evt.zipName);
       if (!state.watcherStatus[evt.projectName]) state.watcherStatus[evt.projectName] = {};
       state.watcherStatus[evt.projectName].lastEvent = { type: 'processing', zipName: evt.zipName };
       renderSidebar();
@@ -1054,18 +1106,19 @@ function bindEvents() {
   zm.onRunComplete(({ projectName, result }) => {
     state.lastRunResult = { projectName, result };
 
-    // Refresh full state
     zm.getState().then(newState => {
       applyState(newState);
 
-      // Show run summary on dashboard
       showView('viewDashboard');
       state.currentProject = null;
       renderSidebar();
       renderDashboard();
+
+      // Replace the "Processing…" alert with a completion alert (dismissible)
+      resolveProcessingAlert(projectName, result);
+
       renderRunSummary(projectName, result);
 
-      // Show attention alert for collisions
       if (result.collisionAlerts && result.collisionAlerts.length > 0) {
         showAttentionAlert(
           '⚠ FILENAME COLLISION DETECTED',

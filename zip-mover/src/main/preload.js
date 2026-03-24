@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('zipmover', {
   openRootFolder: () =>
     ipcRenderer.invoke('open-root-folder'),
 
+  openRunLog: (name) =>
+    ipcRenderer.invoke('open-run-log', { name }),
+
   // ── Project management ────────────────────────────────────────────────────
   createProject: (name, destinationRoot, excludedFolders) =>
     ipcRenderer.invoke('create-project', { name, destinationRoot, excludedFolders }),
