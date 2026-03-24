@@ -852,3 +852,30 @@ select:focus, .ticker-in:focus, input:focus {
   align-items: center;
 }
 .ord-type { color: var(--amber); font-size: 9px; }
+
+/* ── Volume avg marker ────────────────────────────────────────── */
+.vol-track { position: relative; }
+.vol-avg-mark {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 8px;
+  background: var(--muted);
+  border-radius: 1px;
+  pointer-events: none;
+  opacity: 0.7;
+  transform: translateX(-50%);
+}
+
+/* ── Alert view button (news) ─────────────────────────────────── */
+.alert-view-btn {
+  font-size: 12px;
+  padding: 2px 5px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  opacity: 0.6;
+  color: inherit;
+  flex-shrink: 0;
+}
+.alert-view-btn:hover { opacity: 1; }

@@ -28,8 +28,9 @@ const state = {
   sma20:        null,
   vwap:      null,
   volRatio:  null,
-  volCurrent:0,
-  volAvg:    0,
+  volCurrent:  0,
+  volAvg:      0,
+  volHigh:     0,   // session high volume bar
   high:      null,
   low:       null,
   tape:      'Unknown',
@@ -87,8 +88,9 @@ function bindControls() {
       if (!ticker) return
       if (state.ticker) window.copilot.unsubscribe(state.ticker)
       state.ticker = ticker
-      state.bars   = []
-      state.price  = null
+      state.bars    = []
+      state.price   = null
+      state.volHigh = 0
       state.rsi    = null
       state.macd   = null
       state.vwap   = null
@@ -280,6 +282,7 @@ function setupAlpacaListeners() {
     state.volRatio   = data.volRatio
     state.volCurrent = data.bar?.volume || 0
     state.volAvg     = data.volAvg
+    if (state.volCurrent > state.volHigh) state.volHigh = state.volCurrent
     state.high       = data.high
     state.low        = data.low
     state.bars       = data.bars || []
@@ -386,16 +389,41 @@ function updateIndicators() {
 }
 
 function updateVolume() {
-  const ratio = state.volRatio
-  if (ratio === null) return
-  const pct = Math.min(ratio / 4 * 100, 100)
-  $('vol-ratio').textContent  = `${ratio.toFixed(1)}x avg`
-  $('vol-ratio').className    = 'vol-ratio ' + (ratio > 3 ? 'red' : ratio > 2 ? 'amber' : 'green')
-  $('vol-fill').style.width   = pct + '%'
-  $('vol-fill').style.background = ratio > 3
-    ? 'var(--red)' : ratio > 2 ? 'var(--amber)' : 'var(--green)'
-  $('vol-current').textContent = `Vol: ${state.volCurrent.toLocaleString()}`
-  $('vol-avg').textContent     = `Avg: ${state.volAvg.toLocaleString()}`
+  const ratio   = state.volRatio
+  const current = state.volCurrent
+  const avg     = state.volAvg
+  const high    = state.volHigh || Math.max(current, avg * 3)
+  if (ratio === null || !high) return
+
+  // Scale fill width based on session HIGH volume (not 4x avg)
+  const fillPct  = Math.min((current / high) * 100, 100)
+  const avgPct   = Math.min((avg / high) * 100, 100)
+
+  // Color: below avg = subdued red, above avg = subdued green
+  const aboveAvg = current >= avg
+  const fillColor = aboveAvg
+    ? (ratio > 2.5 ? 'rgba(34,197,94,0.85)' : 'rgba(34,197,94,0.5)')
+    : (ratio < 0.5 ? 'rgba(239,68,68,0.75)' : 'rgba(239,68,68,0.45)')
+
+  const ratioEl = $('vol-ratio')
+  const fillEl  = $('vol-fill')
+  const markEl  = $('vol-avg-mark')
+  const curEl   = $('vol-current')
+  const avgEl   = $('vol-avg')
+
+  if (ratioEl) {
+    ratioEl.textContent = `${ratio.toFixed(1)}x avg`
+    ratioEl.className   = 'vol-ratio ' + (aboveAvg ? 'green' : 'red')
+  }
+  if (fillEl) {
+    fillEl.style.width      = fillPct + '%'
+    fillEl.style.background = fillColor
+  }
+  // Move the avg marker
+  if (markEl) markEl.style.left = avgPct + '%'
+
+  if (curEl) curEl.textContent = `Vol: ${current.toLocaleString()}`
+  if (avgEl) avgEl.textContent = `Avg: ${avg.toLocaleString()}`
 }
 
 function updatePnL() {

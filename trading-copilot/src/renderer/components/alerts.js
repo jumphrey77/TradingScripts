@@ -127,13 +127,18 @@ const AlertManager = (() => {
       })
       const stale    = (now - new Date(alert.timestamp).getTime()) > STALE_MS
       const staleTag = stale ? ' alert-stale' : ''
+      const viewBtn = alert.url
+        ? '<button class="alert-view-btn" onclick="AlertManager.openUrl(this.dataset.url)" data-url="' + encodeURIComponent(alert.url || '') + '" title="View article">🔗</button>'
+        : ''
+      const tooltipAttr = alert.id === 'alert_news' ? `title="${alert.label.replace(/"/g, "&quot;")}"` : ''
       return `
-        <div class="alert-item ${cls}${staleTag}" data-uid="${alert.uid}">
+        <div class="alert-item ${cls}${staleTag}" data-uid="${alert.uid}" ${tooltipAttr}>
           <div class="alert-dot"></div>
           <div class="alert-body">
             <div>${alert.label} <span style="font-size:10px;opacity:0.65;">${alert.ticker || ''}</span></div>
             <div class="alert-time">${time}${stale ? ' · stale' : ''}</div>
           </div>
+          ${viewBtn}
           <button class="alert-send-btn" onclick="AlertManager.sendAlert('${alert.uid}')">Send ↗</button>
           <button class="alert-x-btn" onclick="AlertManager.removeAlert('${alert.uid}')" title="Remove">✕</button>
         </div>`
@@ -178,6 +183,17 @@ const AlertManager = (() => {
     } catch (e) {}
   }
 
+  function openUrl(encodedUrl) {
+    const url = decodeURIComponent(encodedUrl || '')
+    if (url && url.startsWith('http')) {
+      if (window.copilot && window.copilot.openExternal) {
+        window.copilot.openExternal(url)
+      } else {
+        window.open(url, '_blank')
+      }
+    }
+  }
+
   init()
-  return { add, sendAlert, removeAlert, clearTicker, clearAll, setTicker, render }
+  return { add, sendAlert, removeAlert, clearTicker, clearAll, setTicker, render, openUrl }
 })()

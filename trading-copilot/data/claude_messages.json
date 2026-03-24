@@ -568,6 +568,39 @@
       "strategy": "all",
       "autoSend": false,
       "template": "\ud83d\udcf0 News on [T] at [TIME_ET]. Price [P], Vol [VOL]. Analyze catalyst: is this a real move or a trap? Go or no-go?"
+    },
+    {
+      "id": "alert_float_turnover",
+      "condition": "Daily volume exceeds float",
+      "severity": "warning",
+      "label": "Float turnover",
+      "description": "Daily vol exceeded float \u2014 extreme volatility expected",
+      "message_id": "msg_010",
+      "strategy": "all",
+      "autoSend": false,
+      "template": "\u26a1 Float turnover on [T] at [TIME_ET]. Vol [VOL] has exceeded the float. Extreme volatility both ways \u2014 squeeze conditions active. Price [P], RSI [RSI]. Scalp only or stay out?"
+    },
+    {
+      "id": "alert_tape_ask",
+      "condition": "Bar closing in top 20% of range on volume",
+      "severity": "info",
+      "label": "Tape \u2014 ask lifts dominant",
+      "description": "Buyers aggressively hitting ask \u2014 bullish tape",
+      "message_id": "msg_006",
+      "strategy": "all",
+      "autoSend": false,
+      "template": "Tape bullish on [T] at [TIME_ET]. Bar closing near high \u2014 ask lifts dominant. Price [P], Vol [VOL], RSI [RSI], VWAP [VWAP]. Buyers in control \u2014 momentum entry?"
+    },
+    {
+      "id": "alert_tape_bid",
+      "condition": "Bar closing in bottom 20% of range on volume",
+      "severity": "warning",
+      "label": "Tape \u2014 bid hits dominant",
+      "description": "Sellers hitting bids aggressively \u2014 bearish tape",
+      "message_id": "msg_011",
+      "strategy": "all",
+      "autoSend": false,
+      "template": "\u26a0\ufe0f Tape bearish on [T] at [TIME_ET]. Bar closing near low \u2014 bid hits dominant. Price [P], Vol [VOL], RSI [RSI]. Sellers in control \u2014 exit or stay out."
     }
   ],
   "settings": {

@@ -37,7 +37,8 @@ contextBridge.exposeInMainWorld('copilot', {
   getAccount:    ()      => ipcRenderer.invoke('trade:getAccount'),
 
   // ── Window ─────────────────────────────────────────────────────────────────
-  setAlwaysOnTop: (val) => ipcRenderer.send('app:setAlwaysOnTop', val),
+  setAlwaysOnTop:  (val) => ipcRenderer.send('app:setAlwaysOnTop', val),
+  openExternal:    (url) => ipcRenderer.send('app:openExternal', url),
 
   // ── Cleanup ─────────────────────────────────────────────────────────────────
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)

@@ -176,6 +176,13 @@ ipcMain.on('config:save', (event, config) => {
 })
 
 // Toggle alwaysOnTop live from renderer
+ipcMain.on('app:openExternal', (event, url) => {
+  if (url && url.startsWith('http')) {
+    const { shell } = require('electron')
+    shell.openExternal(url)
+  }
+})
+
 ipcMain.on('app:setAlwaysOnTop', (event, value) => {
   if (mainWindow) mainWindow.setAlwaysOnTop(value)
   const config = ConfigManager.get()

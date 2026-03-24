@@ -86,10 +86,14 @@ class AlpacaService extends EventEmitter {
   // ── Subscribe to ticker ────────────────────────────────────────────────────
   subscribe(ticker) {
     this.ticker    = ticker.toUpperCase()
-    this.bars      = []
-    this.bars5m    = []
-    this.bars15m   = []
-    this.vwapAccum = { pv: 0, vol: 0 }
+    this.bars        = []
+    this.bars5m      = []
+    this.bars15m     = []
+    this.vwapAccum   = { pv: 0, vol: 0 }
+    this._sessionHOD = 0
+    this._prevRSI    = null
+    this._prevMACD   = null
+    this._prevSignal = null
     this._subscribeSocket(this.ticker)
     // Pre-load historical bars so RSI/MACD are ready immediately
     this._loadHistoricalBars(this.ticker)
@@ -555,121 +559,120 @@ class AlpacaService extends EventEmitter {
   // ── Alert detection from quote data ───────────────────────────────────────
   _checkAlerts(quote) {
     const ctx = this.tradeCtx
+    const qt  = quote.time  // quote event time
 
-    // Stop hit
-    if (ctx.stop && quote.price <= ctx.stop) {
-      this._fireAlert('alert_005', { ...quote, ...ctx })
-    }
+    if (ctx.stop && quote.price <= ctx.stop)
+      this._fireAlert('alert_005', { ...quote, ...ctx }, qt)
 
-    // Spread too wide (scalp)
-    if (ctx.strategy === 'scalp' && quote.spreadPct > 1.5) {
-      this._fireAlert('alert_006', quote)
-    } else if (ctx.strategy === 'scalp' && quote.spreadPct > 0.8) {
-      this._fireAlert('alert_007', quote)
-    }
+    if (ctx.strategy === 'scalp' && quote.spreadPct > 1.5)
+      this._fireAlert('alert_006', quote, qt)
+    else if (ctx.strategy === 'scalp' && quote.spreadPct > 0.8)
+      this._fireAlert('alert_007', quote, qt)
 
-    // Target 1 hit
-    if (ctx.target1 && quote.price >= ctx.target1) {
-      this._fireAlert('alert_009', { ...quote, ...ctx })
-    }
+    if (ctx.target1 && quote.price >= ctx.target1)
+      this._fireAlert('alert_009', { ...quote, ...ctx }, qt)
 
-    // Target 2 hit
-    if (ctx.target2 && quote.price >= ctx.target2) {
-      this._fireAlert('alert_010', { ...quote, ...ctx })
-    }
+    if (ctx.target2 && quote.price >= ctx.target2)
+      this._fireAlert('alert_010', { ...quote, ...ctx }, qt)
   }
 
   // ── Alert detection from indicator data ───────────────────────────────────
   _checkIndicatorAlerts(ind) {
     const { rsi, macd, macdSignal, macdHist, volRatio, vwap, ema50, high } = ind
     const bars = this.bars
+    const bt   = ind.bar?.time  // bar event time — use for all alert timestamps
 
     // ── RSI alerts ──────────────────────────────────────────────────────────
     if (rsi !== null && bars.length >= 2) {
-      const prevRSI = this._prevRSI || rsi
-      // Overbought cross above 70
-      if (prevRSI <= 70 && rsi > 70)  this._fireAlert('alert_001', ind)
-      // Overbought reclaim — drops back below 70 (bearish confirmation)
-      if (prevRSI >= 70 && rsi < 70)  this._fireAlert('alert_001b', ind)
-      // Oversold cross below 30
-      if (prevRSI >= 30 && rsi < 30)  this._fireAlert('alert_002', ind)
-      // Oversold reclaim — rises back above 30 (bullish confirmation)
-      if (prevRSI <= 30 && rsi > 30)  this._fireAlert('alert_002b', ind)
-      // RSI crosses 50 upward (bearish → bullish)
-      if (prevRSI <= 50 && rsi > 50)  this._fireAlert('alert_rsi50_up', ind)
-      // RSI crosses 50 downward (bullish → bearish)
-      if (prevRSI >= 50 && rsi < 50)  this._fireAlert('alert_rsi50_dn', ind)
+      const prevRSI = this._prevRSI ?? rsi
+      if (prevRSI <= 70 && rsi > 70)  this._fireAlert('alert_001',      ind, bt)
+      if (prevRSI >= 70 && rsi < 70)  this._fireAlert('alert_001b',     ind, bt)
+      if (prevRSI >= 30 && rsi < 30)  this._fireAlert('alert_002',      ind, bt)
+      if (prevRSI <= 30 && rsi > 30)  this._fireAlert('alert_002b',     ind, bt)
+      if (prevRSI <= 50 && rsi > 50)  this._fireAlert('alert_rsi50_up', ind, bt)
+      if (prevRSI >= 50 && rsi < 50)  this._fireAlert('alert_rsi50_dn', ind, bt)
       this._prevRSI = rsi
     }
 
     // ── Volume alerts ────────────────────────────────────────────────────────
-    if (volRatio > 3.0)      this._fireAlert('alert_004', ind)
-    else if (volRatio > 2.0) this._fireAlert('alert_003', ind)
+    if (volRatio > 3.0)      this._fireAlert('alert_004', ind, bt)
+    else if (volRatio > 2.0) this._fireAlert('alert_003', ind, bt)
 
-    // ── VWAP cross — candle CLOSE must cross, not just wick (BUG-1 FIX) ────
+    // ── VWAP cross — candle CLOSE must cross (BUG-1 FIX) ─────────────────
     if (bars.length >= 2 && vwap) {
       const prevClose = bars[bars.length - 2].close
       const currClose = bars[bars.length - 1].close
-      // Only fire on confirmed candle close above/below VWAP
-      if (prevClose < vwap && currClose > vwap)  this._fireAlert('alert_013', ind)
-      if (prevClose > vwap && currClose < vwap)  this._fireAlert('alert_014', ind)
+      if (prevClose < vwap && currClose > vwap) this._fireAlert('alert_013', ind, bt)
+      if (prevClose > vwap && currClose < vwap) this._fireAlert('alert_014', ind, bt)
     }
 
-    // ── MACD crossover (BUG-3 FIX) — needs signal line ───────────────────
+    // ── MACD crossover ────────────────────────────────────────────────────
     if (macd !== null && macdSignal !== null) {
       const prevMACD   = this._prevMACD   ?? macd
       const prevSignal = this._prevSignal ?? macdSignal
-      // Bullish cross: MACD crosses above signal
-      if (prevMACD <= prevSignal && macd > macdSignal) {
-        this._fireAlert('alert_011', { ...ind, crossType: 'bullish' })
-      }
-      // Bearish cross: MACD crosses below signal
-      if (prevMACD >= prevSignal && macd < macdSignal) {
-        this._fireAlert('alert_012', { ...ind, crossType: 'bearish' })
-      }
+      if (prevMACD <= prevSignal && macd > macdSignal)
+        this._fireAlert('alert_011', { ...ind, crossType: 'bullish' }, bt)
+      if (prevMACD >= prevSignal && macd < macdSignal)
+        this._fireAlert('alert_012', { ...ind, crossType: 'bearish' }, bt)
       this._prevMACD   = macd
       this._prevSignal = macdSignal
     }
 
-    // ── HOD Breakout — close above session high ───────────────────────────
-    if (bars.length >= 2 && high) {
-      const prevHigh   = bars[bars.length - 2].high
-      const sessionHOD = Math.max(...bars.map(b => b.high))
+    // ── HOD Breakout ──────────────────────────────────────────────────────
+    if (bars.length >= 2) {
+      const sessionHOD = this._sessionHOD || 0
       const currClose  = bars[bars.length - 1].close
-      // Price closes above prior HOD on above-average volume
-      if (currClose > sessionHOD && volRatio > 1.5) {
-        this._fireAlert('alert_hod', ind)
-      }
+      const currHigh   = bars[bars.length - 1].high
+      if (currClose > sessionHOD && volRatio > 1.5 && sessionHOD > 0)
+        this._fireAlert('alert_hod', ind, bt)
+      this._sessionHOD = Math.max(sessionHOD, currHigh)
     }
 
     // ── EMA50 alerts ──────────────────────────────────────────────────────
     if (ema50 && bars.length >= 2) {
       const prevClose = bars[bars.length - 2].close
       const currClose = bars[bars.length - 1].close
-      // EMA50 Lost — close below EMA50
-      if (prevClose >= ema50 && currClose < ema50) this._fireAlert('alert_ema50_lost', ind)
-      // EMA50 Bounce — touch EMA50 then close above
-      if (prevClose <= ema50 * 1.002 && currClose > ema50) this._fireAlert('alert_ema50_bounce', ind)
+      if (prevClose >= ema50 && currClose < ema50)
+        this._fireAlert('alert_ema50_lost',   ind, bt)
+      if (prevClose <= ema50 * 1.002 && currClose > ema50)
+        this._fireAlert('alert_ema50_bounce', ind, bt)
     }
 
-    // ── Volume Divergence — new price high but lower volume ───────────────
+    // ── Volume Divergence ─────────────────────────────────────────────────
     if (bars.length >= 4) {
-      const last  = bars[bars.length - 1]
-      const prev  = bars[bars.length - 2]
-      const prev2 = bars[bars.length - 3]
+      const last = bars[bars.length - 1], prev = bars[bars.length - 2], prev2 = bars[bars.length - 3]
       if (last.high > prev.high && prev.high > prev2.high &&
-          last.volume < prev.volume && prev.volume < prev2.volume) {
-        this._fireAlert('alert_vol_div', ind)
-      }
+          last.volume < prev.volume && prev.volume < prev2.volume)
+        this._fireAlert('alert_vol_div', ind, bt)
     }
 
-    // ── Round Number Test — price within $0.03 of round number ───────────
+    // ── Round Number Test ─────────────────────────────────────────────────
     if (ind.bar) {
-      const price     = ind.bar.close
-      const rounded   = Math.round(price * 2) / 2  // nearest $0.50
-      const distance  = Math.abs(price - rounded)
-      if (distance <= 0.03 && distance > 0) {
-        this._fireAlert('alert_round', { ...ind, roundLevel: rounded })
+      const price    = ind.bar.close
+      const rounded  = Math.round(price * 2) / 2
+      const distance = Math.abs(price - rounded)
+      if (distance <= 0.03 && distance > 0)
+        this._fireAlert('alert_round', { ...ind, roundLevel: rounded }, bt)
+    }
+
+    // ── Float Turnover — daily vol > float size ───────────────────────────
+    if (ind.volAvg && this.tradeCtx.float) {
+      const dailyVol = bars.reduce((sum, b) => sum + (b.volume || 0), 0)
+      if (dailyVol > this.tradeCtx.float)
+        this._fireAlert('alert_float_turnover', ind, bt)
+    }
+
+    // ── Tape Speed — ask lifts dominant (approximated from bar) ──────────
+    if (bars.length >= 1) {
+      const bar = bars[bars.length - 1]
+      // Bullish bar closing near high = ask lifts dominant
+      if (bar.close && bar.high && bar.low) {
+        const range    = bar.high - bar.low
+        const position = range > 0 ? (bar.close - bar.low) / range : 0.5
+        if (position > 0.8 && volRatio > 1.5)  // closing in top 20% of range
+          this._fireAlert('alert_tape_ask', ind, bt)
+        if (position < 0.2 && volRatio > 1.5)  // closing in bottom 20%
+          this._fireAlert('alert_tape_bid', ind, bt)
       }
     }
 
@@ -681,7 +684,8 @@ class AlpacaService extends EventEmitter {
   }
 
   // ── Fire alert with per-alert cooldowns ──────────────────────────────────
-  _fireAlert(alertId, data) {
+  // eventTime = bar/quote time (event), falls back to now (report time)
+  _fireAlert(alertId, data, eventTime) {
     const now = Date.now()
     // Per-alert cooldowns — VWAP much longer to avoid noise
     const cooldowns = {
@@ -701,8 +705,11 @@ class AlpacaService extends EventEmitter {
       alert_ema50_lost: 5 * 60 * 1000,  // EMA50 lost — 5 min
       alert_ema50_bounce:5 * 60 * 1000, // EMA50 bounce — 5 min
       alert_vol_div:    5 * 60 * 1000,  // Volume divergence — 5 min
-      alert_round:      2 * 60 * 1000,  // Round number — 2 min
-      alert_news:       0,               // News — always fire
+      alert_round:          2 * 60 * 1000,  // Round number — 2 min
+      alert_news:           0,               // News — always fire
+      alert_float_turnover: 10 * 60 * 1000, // Float turnover — 10 min
+      alert_tape_ask:       2 * 60 * 1000,  // Tape ask lifts — 2 min
+      alert_tape_bid:       2 * 60 * 1000,  // Tape bid hits — 2 min
     }
     const cooldown = cooldowns[alertId] || 30000
 
@@ -710,7 +717,8 @@ class AlpacaService extends EventEmitter {
         now - this.alertCooldowns[alertId] < cooldown) return
 
     this.alertCooldowns[alertId] = now
-    this.emit('alert', { alertId, data, timestamp: new Date().toISOString() })
+    const ts = eventTime ? new Date(eventTime).toISOString() : new Date().toISOString()
+    this.emit('alert', { alertId, data, timestamp: ts })
   }
 }
 
