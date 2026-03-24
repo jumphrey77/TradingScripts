@@ -9,16 +9,23 @@
 const state = {
   ticker:    '',
   price:     null,
-  autoCopyOnSelect: true,
-  tradePresets:     [],
+  autoCopyOnSelect:   true,
+  tradePresets:       [],
+  lastPreset:         null,
+  autoUpdateLevels:   true,
   bid:       null,
   ask:       null,
   spread:    null,
   spreadPct: null,
-  rsi:       null,
-  rsi5m:     null,
-  rsi15m:    null,
-  macd:      null,
+  rsi:          null,
+  rsi5m:        null,
+  rsi15m:       null,
+  macd:         null,
+  macdSignal:   null,
+  macdHist:     null,
+  ema20:        null,
+  ema50:        null,
+  sma20:        null,
   vwap:      null,
   volRatio:  null,
   volCurrent:0,
@@ -49,6 +56,7 @@ async function init() {
     state.autoCopyOnSelect = cfg.autoCopyOnSelect !== false
     state.tradePresets     = cfg.tradePresets || []
     renderPresets()
+    populatePresetDropdown()
   }
   bindControls()
   await loadMessages()
@@ -112,39 +120,31 @@ function bindControls() {
     updateModeUI()
   })
 
-  // Entry price set
-  $('set-entry-btn').addEventListener('click', () => {
+  // Entry price set — click OR Enter key
+  const applyEntry = () => {
     const val = parseFloat($('entry-input').value)
     if (!isNaN(val) && val > 0) {
       state.entry     = val
       state.entryTime = Date.now()
-      // Reset any active preset highlight — entry changed
-      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('preset-active'))
-      const rrRow = $('rr-row')
-      if (rrRow) rrRow.style.display = 'none'
       pushTradeContext()
       updatePnL()
+      // Auto-update levels if enabled and last preset known
+      if (state.autoUpdateLevels && state.lastPreset) {
+        applyPreset(state.lastPreset)
+        showToast('Entry $' + val.toFixed(3) + ' — levels updated')
+      } else {
+        // Reset preset highlight since entry changed without re-applying
+        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('preset-active'))
+        const rrRow = $('rr-row')
+        if (rrRow) rrRow.style.display = 'none'
+      }
     }
-  })
+  }
+
 
   // Stop input
-  $('stop-input').addEventListener('change', e => {
-    const val = parseFloat(e.target.value)
-    if (!isNaN(val)) {
-      state.stop = val
-      pushTradeContext()
-    }
-  })
 
   // Target inputs
-  $('target1-input').addEventListener('change', e => {
-    state.target1 = parseFloat(e.target.value) || null
-    pushTradeContext()
-  })
-  $('target2-input').addEventListener('change', e => {
-    state.target2 = parseFloat(e.target.value) || null
-    pushTradeContext()
-  })
 
   // Config button
   $('config-btn').addEventListener('click', () => {
@@ -180,21 +180,30 @@ function updateModeUI() {
   if (mode === 'off') {
     show('off-state')
     hide('main-panel')
-    hide('entry-bar')
     return
   }
 
   hide('off-state')
   show('main-panel')
 
-  // Entry bar
-  if (mode === 'intrade' || mode === 'exit') show('entry-bar')
-  else hide('entry-bar')
-
-  // Trade levels
-  if (mode === 'intrade') { show('intrade-levels'); hide('exit-levels') }
-  else if (mode === 'exit') { hide('intrade-levels'); show('exit-levels') }
-  else { hide('intrade-levels'); hide('exit-levels') }
+  // Trade form + positions/orders
+  if (mode === 'intrade') {
+    show('intrade-levels')
+    hide('exit-levels')
+    show('positions-panel')
+    show('orders-panel')
+    startPositionsPolling()
+  } else if (mode === 'exit') {
+    hide('intrade-levels')
+    show('exit-levels')
+    show('positions-panel')
+    show('orders-panel')
+  } else {
+    hide('intrade-levels')
+    hide('exit-levels')
+    hide('positions-panel')
+    hide('orders-panel')
+  }
 
   // Scalp-specific UI
   if (strategy === 'scalp') {
@@ -259,9 +268,14 @@ function setupAlpacaListeners() {
 
   window.copilot.onIndicators(data => {
     state.rsi        = data.rsi
-    state.rsi5m      = data.rsi5m  || null
-    state.rsi15m     = data.rsi15m || null
+    state.rsi5m      = data.rsi5m      || null
+    state.rsi15m     = data.rsi15m     || null
     state.macd       = data.macd
+    state.macdSignal = data.macdSignal || null
+    state.macdHist   = data.macdHist   || null
+    state.ema20      = data.ema20      || null
+    state.ema50      = data.ema50      || null
+    state.sma20      = data.sma20      || null
     state.vwap       = data.vwap
     state.volRatio   = data.volRatio
     state.volCurrent = data.bar?.volume || 0
@@ -291,16 +305,14 @@ function updatePriceDisplay() {
   const changeEl = $('change-display')
   el.textContent = `$${state.price.toFixed(3)}`
 
-  if (state.entry) {
-    const diff    = state.price - state.entry
-    const pct     = (diff / state.entry * 100).toFixed(1)
-    const sign    = diff >= 0 ? '+' : ''
-    changeEl.textContent = `${sign}$${diff.toFixed(3)} (${sign}${pct}%)`
-    changeEl.className   = 'price-change ' + (diff >= 0 ? 'green' : 'red')
-    el.className         = 'price-big '    + (diff >= 0 ? 'green' : 'red')
+  // Price color based on vs VWAP when not in a position
+  if (state.vwap) {
+    const aboveVwap = state.price > state.vwap
+    el.className    = 'price-big ' + (aboveVwap ? 'green' : 'red')
+    changeEl.textContent = ''
   } else {
     changeEl.textContent = ''
-    el.className         = 'price-big'
+    el.className = 'price-big'
   }
 
   // Scalp callout
@@ -359,7 +371,9 @@ function updateIndicators() {
 
   if (macd !== null) {
     const sign = macd >= 0 ? '+' : ''
-    $('macd-val').textContent = `${sign}${macd.toFixed(4)}`
+    const hist = state.macdHist
+    const arrow = hist !== null ? (hist > 0 ? ' ▲' : ' ▼') : ''
+    $('macd-val').textContent = `${sign}${macd.toFixed(4)}${arrow}`
     $('macd-val').className   = 'metric-val ' + (macd >= 0 ? 'green' : 'red')
   }
 
@@ -385,24 +399,26 @@ function updateVolume() {
 }
 
 function updatePnL() {
-  if (!state.entry || !state.price) return
-  const diff    = state.price - state.entry
+  // P&L = live market price vs YOUR entry price
+  // Never use entry as "current price"
+  if (!state.entry) return
+  const livePrice = state.price  // always from Alpaca feed
+  if (!livePrice) return
+
+  const shares  = parseInt($('order-qty')?.value || state.shares || 100)
+  const diff    = livePrice - state.entry
   const pct     = (diff / state.entry * 100).toFixed(1)
-  const amt     = (diff * state.shares).toFixed(2)
+  const amt     = (diff * shares).toFixed(2)
   const sign    = diff >= 0 ? '+' : ''
   const str     = `${sign}$${amt} (${sign}${pct}%)`
   const cls     = diff >= 0 ? 'green' : 'red'
-  $('pnl-display').textContent = str
-  $('pnl-display').className   = 'pnl-display ' + cls
-  $('lv-pnl').textContent      = str
-  $('lv-pnl').className        = 'level-val ' + cls
+
+  // P&L now shown in positions panel from Alpaca data
+  // Nothing to update in main panel
 }
 
 function updateExitLevels() {
-  if (state.mode !== 'exit') return
-  $('ex-entry').textContent   = state.entry  ? `$${state.entry.toFixed(3)}`  : '—'
-  $('ex-current').textContent = state.price  ? `$${state.price.toFixed(3)}`  : '—'
-  $('ex-stop').textContent    = state.stop   ? `$${state.stop.toFixed(3)}`   : '—'
+  // Exit levels shown via positions panel
 }
 
 function updateTapeDirection() {
@@ -445,12 +461,8 @@ function addTapeRow(bar) {
 
 // ── Levels display ─────────────────────────────────────────────────────────────
 function updateLevels() {
-  $('lv-entry').textContent = state.entry ? `$${state.entry.toFixed(3)}` : '—'
-  $('lv-stop').textContent  = state.stop  ? `$${state.stop.toFixed(3)}`  : '—'
-  if (state.entryTime) {
-    const elapsed = Date.now() - state.entryTime
-    $('lv-time').textContent = formatElapsed(elapsed)
-  }
+  // Trade levels now driven by Make a Trade form
+  // Nothing to update here - levels shown in calc-levels display
 }
 setInterval(updateLevels, 1000)
 
@@ -481,6 +493,8 @@ function applyPreset(preset) {
     showToast('Set entry price first')
     return
   }
+  // Remember last used preset for auto-update on entry change
+  state.lastPreset = preset
 
   const entry = state.entry
   const stop  = parseFloat((entry * (1 - preset.sl  / 100)).toFixed(3))
@@ -704,4 +718,357 @@ function showToast(text) {
 }
 
 // ── Start ──────────────────────────────────────────────────────────────────────
+
+// Paper trade order submission
+async function submitOrder(side) {
+  if (!state.ticker) { showToast('Enter a ticker first'); return }
+
+  const qtyEl  = $('order-qty')
+  const qty    = parseInt(qtyEl?.value || 100)
+  const status = $('order-status')
+
+  if (isNaN(qty) || qty <= 0) { showToast('Invalid share quantity'); return }
+
+  const price  = state.price ? '$' + state.price.toFixed(3) : 'market price'
+  const action = side === 'buy' ? 'BUY' : 'SELL'
+  const msg    = action + ' ' + qty + ' shares of ' + state.ticker + ' at ' + price + ' (paper)?'
+  if (!confirm(msg)) return
+
+  const buyBtn  = $('buy-btn')
+  const sellBtn = $('sell-btn')
+  if (buyBtn)  buyBtn.disabled  = true
+  if (sellBtn) sellBtn.disabled = true
+  if (status)  status.textContent = 'Sending...'
+
+  try {
+    const result = await window.copilot.submitOrder({ ticker: state.ticker, qty, side })
+
+    if (result.success) {
+      const order     = result.order
+      const fillPrice = parseFloat(order.filled_avg_price || order.limit_price || state.price || 0)
+      const statusTxt = order.status || 'submitted'
+
+      if (status) {
+        status.textContent = action + ' ' + qty + ' @ $' + fillPrice.toFixed(3) + ' - ' + statusTxt
+        status.className   = 'order-status ' + (side === 'buy' ? 'order-ok' : 'order-sell')
+      }
+
+      if (side === 'buy' && fillPrice > 0) {
+        const entryIn = $('entry-input')
+        if (entryIn) {
+          entryIn.value   = fillPrice.toFixed(3)
+          state.entry     = fillPrice
+          state.entryTime = Date.now()
+          pushTradeContext()
+          updatePnL()
+          showToast('Entry set to $' + fillPrice.toFixed(3))
+        }
+      }
+      if (side === 'sell') {
+        showToast('SELL ' + qty + ' ' + state.ticker + ' submitted')
+      }
+      console.log('[Trade] ' + action + ' ' + qty + ' ' + state.ticker + ' - ' + statusTxt)
+
+    } else {
+      if (status) {
+        status.textContent = 'Error: ' + result.error
+        status.className   = 'order-status order-err'
+      }
+      showToast('Order failed: ' + result.error)
+    }
+  } catch (e) {
+    if (status) status.textContent = 'Error - see console'
+    console.error('[Trade] submitOrder error:', e)
+  } finally {
+    if (buyBtn)  buyBtn.disabled  = false
+    if (sellBtn) sellBtn.disabled = false
+  }
+}
+
+
+// ── Trade Form Logic ────────────────────────────────────────────────────────
+
+function onOrderPriceChange() {
+  // Auto-recalculate levels when price changes if preset selected
+  const presetSel = $('preset-select')
+  if (!presetSel || !presetSel.value) return
+  const preset = state.tradePresets.find(p => p.name === presetSel.value)
+  if (preset) calcLevels(preset)
+}
+
+function onPresetSelect(name) {
+  if (name === '__manual__') {
+    // Clear calculated levels — user will type them
+    const fields = ['calc-sl','calc-t1','calc-t2','calc-sl-pct','calc-t1-pct','calc-t2-pct']
+    fields.forEach(id => { const el = $(id); if (el) el.textContent = '—' })
+    const rrRow = $('rr-row')
+    if (rrRow) rrRow.style.display = 'none'
+    state.lastPreset = null
+    state.stop    = null
+    state.target1 = null
+    state.target2 = null
+    return
+  }
+  const preset = state.tradePresets.find(p => p.name === name)
+  if (!preset) return
+  state.lastPreset = preset
+  calcLevels(preset)
+}
+
+function calcLevels(preset) {
+  const priceEl = $('order-price')
+  const price   = parseFloat(priceEl?.value) || state.price
+  if (!price) return
+
+  const sl = parseFloat((price * (1 - preset.sl  / 100)).toFixed(3))
+  const t1 = parseFloat((price * (1 + preset.t1  / 100)).toFixed(3))
+  const t2 = parseFloat((price * (1 + preset.t2  / 100)).toFixed(3))
+
+  state.stop    = sl
+  state.target1 = t1
+  state.target2 = t2
+
+  // Update display
+  const set = (id, val, pct) => {
+    const el = $(id)
+    if (el) el.textContent = '$' + val.toFixed(3)
+    const pctEl = $(id + '-pct') || $(pct)
+    if (pctEl) pctEl.textContent = preset[pct.replace('calc-','').replace('-pct','')] + '%'
+  }
+
+  const slEl  = $('calc-sl');  if (slEl)  slEl.textContent  = '$' + sl.toFixed(3)
+  const t1El  = $('calc-t1');  if (t1El)  t1El.textContent  = '$' + t1.toFixed(3)
+  const t2El  = $('calc-t2');  if (t2El)  t2El.textContent  = '$' + t2.toFixed(3)
+
+  const slPct = $('calc-sl-pct'); if (slPct) slPct.textContent = '-' + preset.sl + '%'
+  const t1Pct = $('calc-t1-pct'); if (t1Pct) t1Pct.textContent = '+' + preset.t1 + '%'
+  const t2Pct = $('calc-t2-pct'); if (t2Pct) t2Pct.textContent = '+' + preset.t2 + '%'
+
+  // R:R
+  const risk   = price - sl
+  const reward = t2    - price
+  const rr     = risk > 0 ? (reward / risk).toFixed(1) : '—'
+  const rrRow  = $('rr-row')
+  const rrEl   = $('lv-rr')
+  if (rrRow) rrRow.style.display = ''
+  if (rrEl)  {
+    rrEl.textContent = '1 : ' + rr
+    rrEl.className   = 'calc-val ' + (parseFloat(rr) >= 2 ? 'green' : parseFloat(rr) >= 1 ? 'amber' : 'red')
+  }
+}
+
+function populatePresetDropdown() {
+  const sel = $('preset-select')
+  if (!sel) return
+  const prev = sel.value
+  sel.innerHTML = '<option value="">Select preset...</option>'
+  // Manual option — enter levels yourself
+  const manOpt = document.createElement('option')
+  manOpt.value       = '__manual__'
+  manOpt.textContent = 'Manual (enter levels)'
+  sel.appendChild(manOpt)
+  state.tradePresets.forEach(p => {
+    const opt = document.createElement('option')
+    opt.value       = p.name
+    opt.textContent = p.name + ' (SL ' + p.sl + '% T1 ' + p.t1 + '% T2 ' + p.t2 + '%)'
+    sel.appendChild(opt)
+  })
+  if (prev) sel.value = prev
+}
+
+// ── Order submission ─────────────────────────────────────────────────────────
+async function submitOrder(side) {
+  if (!state.ticker) { showToast('Enter a ticker first'); return }
+
+  const priceEl   = $('order-price')
+  const qtyEl     = $('order-qty')
+  const typeEl    = $('order-type')
+  const statusEl  = $('order-status')
+  const buyBtn    = $('buy-btn')
+
+  const orderType = typeEl?.value || 'market'
+  const qty       = parseInt(qtyEl?.value || 100)
+  const price     = parseFloat(priceEl?.value) || state.price
+
+  if (isNaN(qty) || qty <= 0) { showToast('Invalid quantity'); return }
+  if (orderType !== 'market' && (!price || isNaN(price))) {
+    showToast('Enter a price for ' + orderType + ' order'); return
+  }
+
+  // Build confirmation message
+  const priceStr  = orderType === 'market' ? 'market price' : '$' + price.toFixed(3)
+  const slStr     = state.stop   ? ' SL $' + state.stop.toFixed(3)   : ''
+  const t1Str     = state.target1? ' T1 $' + state.target1.toFixed(3): ''
+  const orderClass= (orderType === 'bracket' && state.stop && state.target1) ? 'bracket' : 'simple'
+  const msg = 'BUY ' + qty + ' ' + state.ticker + ' at ' + priceStr + slStr + t1Str + ' (' + orderType + (orderClass === 'bracket' ? ' bracket - SL+T1 auto' : '') + ') - Confirm paper trade?'
+  if (!confirm(msg)) return
+
+  if (buyBtn) buyBtn.disabled = true
+  if (statusEl) statusEl.textContent = 'Submitting...'
+
+  // Build order payload
+  const payload = {
+    symbol:        state.ticker,
+    qty:           String(qty),
+    side:          'buy',
+    time_in_force: 'day'
+  }
+
+  if (orderType === 'market') {
+    payload.type = 'market'
+
+  } else if (orderType === 'limit') {
+    payload.type        = 'limit'
+    payload.limit_price = String(price.toFixed(2))
+
+  } else if (orderType === 'bracket_market') {
+    // Market entry + bracket (auto SL + T1)
+    payload.type        = 'market'
+    payload.order_class = 'bracket'
+    if (state.stop) {
+      payload.stop_loss = { stop_price: String(state.stop.toFixed(2)) }
+    }
+    if (state.target1) {
+      payload.take_profit = { limit_price: String(state.target1.toFixed(2)) }
+    }
+
+  } else if (orderType === 'bracket_limit') {
+    // Limit entry + bracket (auto SL + T1)
+    payload.type        = 'limit'
+    payload.limit_price = String(price.toFixed(2))
+    payload.order_class = 'bracket'
+    if (state.stop) {
+      payload.stop_loss = { stop_price: String(state.stop.toFixed(2)) }
+    }
+    if (state.target1) {
+      payload.take_profit = { limit_price: String(state.target1.toFixed(2)) }
+    }
+  }
+
+  try {
+    const result = await window.copilot.submitOrder(payload)
+
+    if (result.success) {
+      const order   = result.order
+      const filled  = order.filled_avg_price || order.limit_price || ''
+      const status  = order.status || 'submitted'
+      const priceShow = filled ? '$' + parseFloat(filled).toFixed(3) : priceStr
+      if (statusEl) {
+        statusEl.textContent = 'BUY ' + qty + ' @ ' + priceShow + ' - ' + status
+        statusEl.className   = 'order-status-line order-ok'
+      }
+      console.log('[Trade] BUY ' + qty + ' ' + state.ticker + ' submitted - ' + status)
+      // Refresh orders after short delay
+      setTimeout(() => refreshOrders(), 1500)
+      setTimeout(() => refreshPositions(), 3000)
+    } else {
+      if (statusEl) {
+        statusEl.textContent = 'Error: ' + result.error
+        statusEl.className   = 'order-status-line order-err'
+      }
+      showToast('Order failed: ' + result.error)
+    }
+  } catch (e) {
+    console.error('[Trade] Error:', e)
+    if (statusEl) statusEl.textContent = 'Error - see console'
+  } finally {
+    if (buyBtn) buyBtn.disabled = false
+  }
+}
+
+// ── Positions polling ────────────────────────────────────────────────────────
+let _posInterval = null
+
+function startPositionsPolling() {
+  refreshPositions()
+  refreshOrders()
+  if (_posInterval) clearInterval(_posInterval)
+  _posInterval = setInterval(() => {
+    if (state.mode === 'intrade' || state.mode === 'exit') {
+      refreshPositions()
+      refreshOrders()
+    }
+  }, 5000)
+}
+
+async function refreshPositions() {
+  const result = await window.copilot.getPositions()
+  if (!result.success) return
+  const container = $('positions-container')
+  if (!container) return
+  const positions = result.positions || []
+
+  if (positions.length === 0) {
+    container.innerHTML = '<div class="no-data">No open positions</div>'
+    return
+  }
+
+  container.innerHTML = positions.map(p => {
+    const qty      = parseFloat(p.qty)
+    const avgEntry = parseFloat(p.avg_entry_price)
+    const current  = parseFloat(p.current_price)
+    const pnl      = parseFloat(p.unrealized_pl)
+    const pnlPct   = parseFloat(p.unrealized_plpc) * 100
+    const sign     = pnl >= 0 ? '+' : ''
+    const cls      = pnl >= 0 ? 'green' : 'red'
+    return '<div class="position-card">' +
+      '<div class="pos-header">' +
+        '<span class="pos-ticker">' + p.symbol + '</span>' +
+        '<span class="pos-qty">' + qty + ' shares</span>' +
+        '<span class="pos-pnl ' + cls + '">' + sign + '$' + pnl.toFixed(2) + ' (' + sign + pnlPct.toFixed(1) + '%)</span>' +
+      '</div>' +
+      '<div class="pos-detail">' +
+        '<span class="pos-entry">Entry $' + avgEntry.toFixed(3) + '</span>' +
+        '<span class="pos-arrow">→</span>' +
+        '<span class="pos-price">Now $' + current.toFixed(3) + '</span>' +
+      '</div>' +
+    '</div>'
+  }).join('')
+}
+
+async function refreshOrders() {
+  const result = await window.copilot.getPositions()
+  // Use orders endpoint
+  try {
+    const cfg     = await window.copilot.getConfig()
+    // Orders fetched via main process — use existing getPositions as pattern
+    // For now show from last submitOrder result cached
+  } catch(e) {}
+
+  // Fetch today's orders
+  const ordResult = await window.copilot.getOrders()
+  if (!ordResult || !ordResult.success) return
+  const container  = $('orders-container')
+  if (!container) return
+  const orders = ordResult.orders || []
+
+  if (orders.length === 0) {
+    container.innerHTML = '<div class="no-data">No orders today</div>'
+    return
+  }
+
+  container.innerHTML = orders.map(o => {
+    const side     = o.side.toUpperCase()
+    const sideCls  = side === 'BUY' ? 'green' : 'red'
+    const price    = o.filled_avg_price || o.limit_price || o.stop_price || '—'
+    const priceStr = price !== '—' ? '$' + parseFloat(price).toFixed(3) : '—'
+    const time     = new Date(o.submitted_at || o.created_at).toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit', hour12: true
+    })
+    const orderType = o.order_class === 'bracket' ? 'BKT'
+                    : o.type === 'market' ? 'MKT'
+                    : o.type === 'limit'  ? 'LMT'
+                    : o.type || '—'
+    return '<div class="order-row">' +
+      '<span class="ord-time">' + time + '</span>' +
+      '<span class="ord-side ' + sideCls + '">' + side + '</span>' +
+      '<span class="ord-ticker">' + o.symbol + '</span>' +
+      '<span class="ord-qty">' + o.qty + '</span>' +
+      '<span class="ord-type">' + orderType + '</span>' +
+      '<span class="ord-price">' + priceStr + '</span>' +
+      '<span class="ord-status">' + o.status + '</span>' +
+    '</div>'
+  }).join('')
+}
+
 init()

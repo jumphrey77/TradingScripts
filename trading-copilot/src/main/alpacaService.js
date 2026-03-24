@@ -93,9 +93,84 @@ class AlpacaService extends EventEmitter {
     this._subscribeSocket(this.ticker)
     // Pre-load historical bars so RSI/MACD are ready immediately
     this._loadHistoricalBars(this.ticker)
+    // Refresh 5m/15m bars every minute (not streamed on free tier)
+    this._start5m15mRefresh(this.ticker)
+    // Poll news every 60 seconds
+    this._startNewsPolling(this.ticker)
     // WebSocket handles live quotes - see _connect()
   }
 
+
+  // ── News feed polling ────────────────────────────────────────────────────
+  _startNewsPolling(ticker) {
+    if (this._newsTimer) clearInterval(this._newsTimer)
+    this._lastNewsIds = new Set()
+    const poll = async () => {
+      try {
+        const dataUrl = this.config.alpacaDataUrl || 'https://data.alpaca.markets'
+        const headers = {
+          'APCA-API-KEY-ID':     this.config.alpacaKey,
+          'APCA-API-SECRET-KEY': this.config.alpacaSecret
+        }
+        const resp = await fetch(
+          `${dataUrl}/v1beta1/news?symbols=${ticker}&limit=5&sort=desc`,
+          { headers }
+        )
+        const data = await resp.json()
+        const articles = data.news || []
+        for (const article of articles) {
+          if (!this._lastNewsIds.has(article.id)) {
+            this._lastNewsIds.add(article.id)
+            // Only emit if within last 30 minutes
+            const age = Date.now() - new Date(article.created_at).getTime()
+            if (age < 30 * 60 * 1000) {
+              console.log(`[${ticker}] NEWS: ${article.headline}`)
+              this.emit('alert', {
+                alertId:   'alert_news',
+                data:      { ...article, ticker },
+                timestamp: new Date().toISOString()
+              })
+            }
+          }
+        }
+      } catch(e) {
+        console.error(`[${ticker}] News poll failed:`, e.message)
+      }
+    }
+    poll() // immediate first poll
+    this._newsTimer = setInterval(poll, 60000) // then every 60s
+  }
+
+  _start5m15mRefresh(ticker) {
+    if (this._mtfTimer) clearInterval(this._mtfTimer)
+    // Refresh 5m and 15m bars every 60 seconds
+    this._mtfTimer = setInterval(async () => {
+      if (this.ticker !== ticker) return
+      try {
+        const dataUrl = this.config.alpacaDataUrl || 'https://data.alpaca.markets'
+        const headers = {
+          'APCA-API-KEY-ID':     this.config.alpacaKey,
+          'APCA-API-SECRET-KEY': this.config.alpacaSecret
+        }
+        const [r5, r15] = await Promise.all([
+          fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=5Min&limit=50&feed=iex`, { headers }),
+          fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=15Min&limit=50&feed=iex`, { headers })
+        ])
+        const d5  = await r5.json()
+        const d15 = await r15.json()
+        const norm = (raw) => (raw || []).map(b => ({
+          ticker, open: b.o||b.open, high: b.h||b.high,
+          low: b.l||b.low, close: b.c||b.close,
+          volume: b.v||b.volume, time: b.t||b.timestamp
+        }))
+        this.bars5m  = norm(d5.bars  || [])
+        this.bars15m = norm(d15.bars || [])
+        console.log(`[${ticker}] 5m/15m refreshed - RSI 5m: ${this._calcRSIFromBars(this.bars5m,14)} 15m: ${this._calcRSIFromBars(this.bars15m,14)}`)
+      } catch(e) {
+        console.error(`[${ticker}] 5m/15m refresh failed:`, e.message)
+      }
+    }, 60000)
+  }
 
   async _loadHistoricalBars(ticker) {
     try {
@@ -232,13 +307,19 @@ class AlpacaService extends EventEmitter {
       const rsi5m  = this._calcRSIFromBars(this.bars5m,  14)
       const rsi15m = this._calcRSIFromBars(this.bars15m, 14)
 
+      const macdFull = this._calcMACDFull()
       const indicators = {
         ticker,
         bar:      lastBar,
         rsi:      this._calcRSI(14),
         rsi5m,
         rsi15m,
-        macd:     this._calcMACD(),
+        macd:     macdFull?.macd     ?? null,
+        macdSignal: macdFull?.signal ?? null,
+        macdHist:   macdFull?.histogram ?? null,
+        ema20:    this._calcEMA(20),
+        ema50:    this._calcEMA(50),
+        sma20:    this._calcSMA(20),
         vwap,
         volAvg:   this._calcAvgVolume(),
         volRatio: this._calcVolRatio(),
@@ -264,6 +345,10 @@ class AlpacaService extends EventEmitter {
       console.log(`[WS] Subscribing to quotes + bars for ${ticker}`)
       this.socket.subscribeForQuotes([ticker])
       this.socket.subscribeForBars([ticker])
+      // Also subscribe to updated bars for 5m/15m aggregation
+      if (this.socket.subscribeForUpdatedBars) {
+        this.socket.subscribeForUpdatedBars([ticker])
+      }
       console.log(`[WS] Subscription confirmed for ${ticker}`)
     } catch (e) {
       console.error('[WS] Subscribe failed:', e.message, e.stack)
@@ -271,7 +356,9 @@ class AlpacaService extends EventEmitter {
   }
 
   unsubscribe(ticker) {
-    if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null }
+    if (this._pollTimer)  { clearInterval(this._pollTimer);  this._pollTimer  = null }
+    if (this._mtfTimer)   { clearInterval(this._mtfTimer);   this._mtfTimer   = null }
+    if (this._newsTimer)  { clearInterval(this._newsTimer);  this._newsTimer  = null }
     if (!this.socket) return
     try {
       this.socket.unsubscribeFromQuotes([ticker])
@@ -345,19 +432,25 @@ class AlpacaService extends EventEmitter {
     }
 
     // Calculate indicators
+    const macdFull = this._calcMACDFull()
     const indicators = {
-      ticker:   b.ticker,
-      bar:      b,
-      rsi:      this._calcRSI(14),
-      rsi5m:    this._calcRSIFromBars(this.bars5m,  14),
-      rsi15m:   this._calcRSIFromBars(this.bars15m, 14),
-      macd:     this._calcMACD(),
+      ticker:     b.ticker,
+      bar:        b,
+      rsi:        this._calcRSI(14),
+      rsi5m:      this._calcRSIFromBars(this.bars5m,  14),
+      rsi15m:     this._calcRSIFromBars(this.bars15m, 14),
+      macd:       macdFull?.macd       ?? null,
+      macdSignal: macdFull?.signal     ?? null,
+      macdHist:   macdFull?.histogram  ?? null,
+      ema20:      this._calcEMA(20),
+      ema50:      this._calcEMA(50),
+      sma20:      this._calcSMA(20),
       vwap,
-      volAvg:   this._calcAvgVolume(),
-      volRatio: this._calcVolRatio(),
-      high:     Math.max(...this.bars.map(x => x.high)),
-      low:      Math.min(...this.bars.map(x => x.low)),
-      bars:     this.bars.slice(-15)
+      volAvg:     this._calcAvgVolume(),
+      volRatio:   this._calcVolRatio(),
+      high:       Math.max(...this.bars.map(x => x.high)),
+      low:        Math.min(...this.bars.map(x => x.low)),
+      bars:       this.bars.slice(-15)
     }
 
     this.emit('bar', b)
@@ -389,24 +482,60 @@ class AlpacaService extends EventEmitter {
     return parseFloat((100 - 100 / (1 + rs)).toFixed(1))
   }
 
-  // ── MACD Calculation ──────────────────────────────────────────────────────
-  _calcMACD() {
-    if (this.bars.length < 26) return null
+  // ── MACD Calculation (line + signal + histogram) ─────────────────────────
+  _calcMACDFull() {
+    if (this.bars.length < 35) return null  // need 26 + 9 for signal
     const closes = this.bars.map(b => b.close)
-    const ema12  = this._ema(closes, 12)
-    const ema26  = this._ema(closes, 26)
-    if (!ema12 || !ema26) return null
-    return parseFloat((ema12 - ema26).toFixed(4))
+
+    // Calculate MACD line for each bar (for signal EMA)
+    const macdSeries = []
+    for (let i = 26; i <= closes.length; i++) {
+      const slice = closes.slice(0, i)
+      const e12   = this._ema(slice, 12)
+      const e26   = this._ema(slice, 26)
+      if (e12 && e26) macdSeries.push(e12 - e26)
+    }
+
+    if (macdSeries.length < 9) return null
+    const macdLine   = macdSeries[macdSeries.length - 1]
+    const signalLine = this._ema(macdSeries, 9)
+    if (!signalLine) return null
+    const histogram  = macdLine - signalLine
+
+    return {
+      macd:      parseFloat(macdLine.toFixed(4)),
+      signal:    parseFloat(signalLine.toFixed(4)),
+      histogram: parseFloat(histogram.toFixed(4))
+    }
+  }
+
+  _calcMACD() {
+    const full = this._calcMACDFull()
+    return full ? full.macd : null
+  }
+
+  // ── EMA Calculations for price levels ─────────────────────────────────────
+  _calcEMA(period) {
+    if (this.bars.length < period) return null
+    const closes = this.bars.map(b => b.close)
+    return parseFloat(this._ema(closes, period).toFixed(4))
   }
 
   _ema(data, period) {
     if (data.length < period) return null
-    const k      = 2 / (period + 1)
-    let ema      = data.slice(0, period).reduce((a, b) => a + b, 0) / period
+    const k   = 2 / (period + 1)
+    let ema   = data.slice(0, period).reduce((a, b) => a + b, 0) / period
     for (let i = period; i < data.length; i++) {
       ema = data[i] * k + ema * (1 - k)
     }
     return ema
+  }
+
+  // ── SMA Calculation ────────────────────────────────────────────────────────
+  _calcSMA(period) {
+    if (this.bars.length < period) return null
+    const closes = this.bars.slice(-period).map(b => b.close)
+    return parseFloat((closes.reduce((a, b) => a + b, 0) / period).toFixed(4))
   }
 
   // ── Volume Calculations ───────────────────────────────────────────────────
@@ -452,25 +581,99 @@ class AlpacaService extends EventEmitter {
 
   // ── Alert detection from indicator data ───────────────────────────────────
   _checkIndicatorAlerts(ind) {
-    const { rsi, macd, volRatio, vwap } = ind
+    const { rsi, macd, macdSignal, macdHist, volRatio, vwap, ema50, high } = ind
+    const bars = this.bars
 
-    if (rsi !== null) {
-      if (rsi > 70)  this._fireAlert('alert_001', ind)
-      if (rsi < 30)  this._fireAlert('alert_002', ind)
+    // ── RSI alerts ──────────────────────────────────────────────────────────
+    if (rsi !== null && bars.length >= 2) {
+      const prevRSI = this._prevRSI || rsi
+      // Overbought cross above 70
+      if (prevRSI <= 70 && rsi > 70)  this._fireAlert('alert_001', ind)
+      // Overbought reclaim — drops back below 70 (bearish confirmation)
+      if (prevRSI >= 70 && rsi < 70)  this._fireAlert('alert_001b', ind)
+      // Oversold cross below 30
+      if (prevRSI >= 30 && rsi < 30)  this._fireAlert('alert_002', ind)
+      // Oversold reclaim — rises back above 30 (bullish confirmation)
+      if (prevRSI <= 30 && rsi > 30)  this._fireAlert('alert_002b', ind)
+      // RSI crosses 50 upward (bearish → bullish)
+      if (prevRSI <= 50 && rsi > 50)  this._fireAlert('alert_rsi50_up', ind)
+      // RSI crosses 50 downward (bullish → bearish)
+      if (prevRSI >= 50 && rsi < 50)  this._fireAlert('alert_rsi50_dn', ind)
+      this._prevRSI = rsi
     }
 
-    if (volRatio > 3.0) this._fireAlert('alert_004', ind)
+    // ── Volume alerts ────────────────────────────────────────────────────────
+    if (volRatio > 3.0)      this._fireAlert('alert_004', ind)
     else if (volRatio > 2.0) this._fireAlert('alert_003', ind)
 
-    // VWAP cross (simple: last bar vs vwap)
-    if (this.bars.length >= 2) {
-      const prev = this.bars[this.bars.length - 2].close
-      const curr = this.bars[this.bars.length - 1].close
-      if (prev < vwap && curr >= vwap) this._fireAlert('alert_013', ind)
-      if (prev > vwap && curr <= vwap) this._fireAlert('alert_014', ind)
+    // ── VWAP cross — candle CLOSE must cross, not just wick (BUG-1 FIX) ────
+    if (bars.length >= 2 && vwap) {
+      const prevClose = bars[bars.length - 2].close
+      const currClose = bars[bars.length - 1].close
+      // Only fire on confirmed candle close above/below VWAP
+      if (prevClose < vwap && currClose > vwap)  this._fireAlert('alert_013', ind)
+      if (prevClose > vwap && currClose < vwap)  this._fireAlert('alert_014', ind)
     }
 
-    // Scalp time check
+    // ── MACD crossover (BUG-3 FIX) — needs signal line ───────────────────
+    if (macd !== null && macdSignal !== null) {
+      const prevMACD   = this._prevMACD   ?? macd
+      const prevSignal = this._prevSignal ?? macdSignal
+      // Bullish cross: MACD crosses above signal
+      if (prevMACD <= prevSignal && macd > macdSignal) {
+        this._fireAlert('alert_011', { ...ind, crossType: 'bullish' })
+      }
+      // Bearish cross: MACD crosses below signal
+      if (prevMACD >= prevSignal && macd < macdSignal) {
+        this._fireAlert('alert_012', { ...ind, crossType: 'bearish' })
+      }
+      this._prevMACD   = macd
+      this._prevSignal = macdSignal
+    }
+
+    // ── HOD Breakout — close above session high ───────────────────────────
+    if (bars.length >= 2 && high) {
+      const prevHigh   = bars[bars.length - 2].high
+      const sessionHOD = Math.max(...bars.map(b => b.high))
+      const currClose  = bars[bars.length - 1].close
+      // Price closes above prior HOD on above-average volume
+      if (currClose > sessionHOD && volRatio > 1.5) {
+        this._fireAlert('alert_hod', ind)
+      }
+    }
+
+    // ── EMA50 alerts ──────────────────────────────────────────────────────
+    if (ema50 && bars.length >= 2) {
+      const prevClose = bars[bars.length - 2].close
+      const currClose = bars[bars.length - 1].close
+      // EMA50 Lost — close below EMA50
+      if (prevClose >= ema50 && currClose < ema50) this._fireAlert('alert_ema50_lost', ind)
+      // EMA50 Bounce — touch EMA50 then close above
+      if (prevClose <= ema50 * 1.002 && currClose > ema50) this._fireAlert('alert_ema50_bounce', ind)
+    }
+
+    // ── Volume Divergence — new price high but lower volume ───────────────
+    if (bars.length >= 4) {
+      const last  = bars[bars.length - 1]
+      const prev  = bars[bars.length - 2]
+      const prev2 = bars[bars.length - 3]
+      if (last.high > prev.high && prev.high > prev2.high &&
+          last.volume < prev.volume && prev.volume < prev2.volume) {
+        this._fireAlert('alert_vol_div', ind)
+      }
+    }
+
+    // ── Round Number Test — price within $0.03 of round number ───────────
+    if (ind.bar) {
+      const price     = ind.bar.close
+      const rounded   = Math.round(price * 2) / 2  // nearest $0.50
+      const distance  = Math.abs(price - rounded)
+      if (distance <= 0.03 && distance > 0) {
+        this._fireAlert('alert_round', { ...ind, roundLevel: rounded })
+      }
+    }
+
+    // ── Scalp time check ──────────────────────────────────────────────────
     if (this.tradeCtx.strategy === 'scalp' && this.tradeCtx.entryTime) {
       const elapsed = (Date.now() - this.tradeCtx.entryTime) / 1000
       if (elapsed > 120) this._fireAlert('alert_015', { ...ind, elapsed })
@@ -482,14 +685,24 @@ class AlpacaService extends EventEmitter {
     const now = Date.now()
     // Per-alert cooldowns — VWAP much longer to avoid noise
     const cooldowns = {
-      alert_013: 5 * 60 * 1000,  // VWAP reclaim — 5 min
-      alert_014: 5 * 60 * 1000,  // VWAP lost — 5 min
-      alert_001: 2 * 60 * 1000,  // RSI overbought — 2 min
-      alert_002: 2 * 60 * 1000,  // RSI oversold — 2 min
-      alert_003: 60 * 1000,       // Volume 2x — 1 min
-      alert_004: 60 * 1000,       // Volume 3x — 1 min
-      alert_011: 3 * 60 * 1000,  // MACD cross — 3 min
-      alert_012: 3 * 60 * 1000,  // MACD cross up — 3 min
+      alert_013:        5 * 60 * 1000,  // VWAP reclaim — 5 min
+      alert_014:        5 * 60 * 1000,  // VWAP lost — 5 min
+      alert_001:        5 * 60 * 1000,  // RSI overbought cross — 5 min
+      alert_001b:       5 * 60 * 1000,  // RSI overbought reclaim — 5 min
+      alert_002:        5 * 60 * 1000,  // RSI oversold cross — 5 min
+      alert_002b:       5 * 60 * 1000,  // RSI oversold reclaim — 5 min
+      alert_rsi50_up:   3 * 60 * 1000,  // RSI cross 50 up — 3 min
+      alert_rsi50_dn:   3 * 60 * 1000,  // RSI cross 50 down — 3 min
+      alert_003:        60 * 1000,       // Volume 2x — 1 min
+      alert_004:        60 * 1000,       // Volume 3x — 1 min
+      alert_011:        5 * 60 * 1000,  // MACD bullish cross — 5 min
+      alert_012:        5 * 60 * 1000,  // MACD bearish cross — 5 min
+      alert_hod:        10 * 60 * 1000, // HOD breakout — 10 min
+      alert_ema50_lost: 5 * 60 * 1000,  // EMA50 lost — 5 min
+      alert_ema50_bounce:5 * 60 * 1000, // EMA50 bounce — 5 min
+      alert_vol_div:    5 * 60 * 1000,  // Volume divergence — 5 min
+      alert_round:      2 * 60 * 1000,  // Round number — 2 min
+      alert_news:       0,               // News — always fire
     }
     const cooldown = cooldowns[alertId] || 30000
 

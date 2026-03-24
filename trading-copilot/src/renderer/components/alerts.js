@@ -41,16 +41,23 @@ const AlertManager = (() => {
       ? resolvePlaceholders(def.template, { ...state, ...data })
       : def.label
 
+    // News alerts get special label with headline
+    let label = def.label
+    if (alertId === 'alert_news' && data && data.headline) {
+      label = data.headline.slice(0, 60) + (data.headline.length > 60 ? '...' : '')
+    }
+
     const alert = {
       uid:       Date.now() + Math.random().toString(36).slice(2),
       id:        alertId,
-      label:     def.label,
+      label,
       severity:  def.severity,
       text:      resolvedText,
       msgId:     def.message_id,
       timestamp: timestamp || new Date().toISOString(),
       template:  def.template,
-      ticker
+      ticker,
+      url:       (alertId === 'alert_news' && data?.url) ? data.url : null
     }
 
     if (!alertCache[ticker]) alertCache[ticker] = []

@@ -45,6 +45,10 @@ function resolvePlaceholders(template, state) {
     '[RSI]':     fmtN(state.rsi),
     '[RSI5]':    fmtN(state.rsi5m),
     '[RSI15]':   fmtN(state.rsi15m),
+    '[EMA20]':   fmt(state.ema20),
+    '[EMA50]':   fmt(state.ema50),
+    '[SMA20]':   fmt(state.sma20),
+    '[MACDH]':   fmtN(state.macdHist, 4),
     '[MACD]':    state.macd != null
                    ? (state.macd >= 0 ? '+' : '') + fmtN(state.macd, 4)
                    : 'N/A',

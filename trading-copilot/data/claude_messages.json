@@ -395,25 +395,25 @@
     },
     {
       "id": "alert_011",
-      "condition": "MACD_CROSS_DOWN",
-      "severity": "warning",
-      "label": "MACD bearish cross",
-      "description": "MACD crossed below signal line",
+      "condition": "MACD crosses above signal line",
+      "severity": "info",
+      "label": "MACD bullish cross",
+      "description": "MACD line crossed above signal \u2014 bullish momentum",
       "message_id": "msg_006",
       "strategy": "regular",
       "autoSend": false,
-      "template": "\u26a0\ufe0f MACD bearish cross on [T] at [TIME_ET]. MACD [MACD], Price [P], entry [E], RSI [RSI], Vol [VOL]. Momentum shift confirmed? Scale out or hold?"
+      "template": "MACD bullish cross on [T] at [TIME_ET]. MACD [MACD], Price [P], RSI [RSI], VWAP [VWAP], Vol [VOL]. Momentum building \u2014 entry or hold?"
     },
     {
       "id": "alert_012",
-      "condition": "MACD_CROSS_UP",
-      "severity": "info",
-      "label": "MACD bullish cross",
-      "description": "MACD crossed above signal line",
-      "message_id": "msg_003",
+      "condition": "MACD crosses below signal line",
+      "severity": "warning",
+      "label": "MACD bearish cross",
+      "description": "MACD line crossed below signal \u2014 bearish momentum",
+      "message_id": "msg_011",
       "strategy": "regular",
       "autoSend": false,
-      "template": "MACD bullish cross on [T] at [TIME_ET]. MACD [MACD], Price [P], RSI [RSI], VWAP [VWAP], Vol [VOL], Tape [TAPE]. Entry opportunity or too late to chase?"
+      "template": "\u26a0\ufe0f MACD bearish cross on [T] at [TIME_ET]. MACD [MACD], Price [P], RSI [RSI], VWAP [VWAP]. Momentum flipping \u2014 scale out or exit?"
     },
     {
       "id": "alert_013",
@@ -458,6 +458,116 @@
       "strategy": "regular",
       "autoSend": false,
       "template": "[T] approaching intraday high [HIGH] at [TIME_ET]. Price [P], entry [E], RSI [RSI], Vol [VOL], Tape [TAPE]. Blue sky breakout potential or resistance rejection? Scale here or hold?"
+    },
+    {
+      "id": "alert_001b",
+      "condition": "RSI drops below 70 after being above",
+      "severity": "warning",
+      "label": "RSI overbought reclaim (bearish)",
+      "description": "RSI dropped back below 70 \u2014 momentum fading",
+      "message_id": "msg_006",
+      "strategy": "regular",
+      "autoSend": false,
+      "template": "\u26a0\ufe0f RSI overbought reclaim on [T] at [TIME_ET]. RSI dropped below 70: [RSI]. Price [P], VWAP [VWAP]. Momentum fading \u2014 scale out or tighten stop?"
+    },
+    {
+      "id": "alert_002b",
+      "condition": "RSI rises above 30 after being below",
+      "severity": "info",
+      "label": "RSI oversold reclaim (bullish)",
+      "description": "RSI reclaimed above 30 \u2014 potential bottom",
+      "message_id": "msg_003",
+      "strategy": "regular",
+      "autoSend": false,
+      "template": "\u2705 RSI oversold reclaim on [T] at [TIME_ET]. RSI recovered above 30: [RSI]. Price [P], VWAP [VWAP], Vol [VOL]. Reversal forming \u2014 entry opportunity?"
+    },
+    {
+      "id": "alert_rsi50_up",
+      "condition": "RSI crosses above 50",
+      "severity": "info",
+      "label": "RSI crossed 50 \u2014 bullish",
+      "description": "RSI crossed above 50 \u2014 momentum shifting bullish",
+      "message_id": "msg_006",
+      "strategy": "regular",
+      "autoSend": false,
+      "template": "RSI crossed above 50 on [T] at [TIME_ET]. RSI [RSI], MACD [MACD], Price [P] vs VWAP [VWAP], Vol [VOL]. Momentum shifting bullish \u2014 entry or add?"
+    },
+    {
+      "id": "alert_rsi50_dn",
+      "condition": "RSI crosses below 50",
+      "severity": "warning",
+      "label": "RSI crossed 50 \u2014 bearish",
+      "description": "RSI crossed below 50 \u2014 momentum shifting bearish",
+      "message_id": "msg_011",
+      "strategy": "regular",
+      "autoSend": false,
+      "template": "\u26a0\ufe0f RSI crossed below 50 on [T] at [TIME_ET]. RSI [RSI], MACD [MACD], Price [P] vs VWAP [VWAP]. Momentum shifting bearish \u2014 tighten stop or exit?"
+    },
+    {
+      "id": "alert_hod",
+      "condition": "Price closes above session high on volume",
+      "severity": "info",
+      "label": "HOD breakout",
+      "description": "Price closed above high of day with volume",
+      "message_id": "msg_007",
+      "strategy": "regular",
+      "autoSend": false,
+      "template": "HOD breakout on [T] at [TIME_ET]. Price [P] closed above session high, Vol [VOL], RSI [RSI], MACD [MACD]. Blue sky territory \u2014 hold for continuation or take partial?"
+    },
+    {
+      "id": "alert_ema50_lost",
+      "condition": "Price closes below EMA50",
+      "severity": "warning",
+      "label": "EMA50 lost",
+      "description": "Price closed below EMA50 \u2014 key support broken",
+      "message_id": "msg_011",
+      "strategy": "regular",
+      "autoSend": false,
+      "template": "\u26a0\ufe0f EMA50 lost on [T] at [TIME_ET]. Price [P] closed below EMA50. RSI [RSI], VWAP [VWAP], Vol [VOL]. First defense line broken \u2014 tighten stop, next target EMA100."
+    },
+    {
+      "id": "alert_ema50_bounce",
+      "condition": "Price bounces off EMA50",
+      "severity": "info",
+      "label": "EMA50 bounce",
+      "description": "Price touched EMA50 and closed above \u2014 support held",
+      "message_id": "msg_003",
+      "strategy": "regular",
+      "autoSend": false,
+      "template": "EMA50 bounce on [T] at [TIME_ET]. Price [P] tapped EMA50 and closed above. RSI [RSI], Vol [VOL], Tape [TAPE]. Classic support hold \u2014 entry or add to position?"
+    },
+    {
+      "id": "alert_vol_div",
+      "condition": "New price high but declining volume",
+      "severity": "warning",
+      "label": "Volume divergence",
+      "description": "Price making higher highs but volume declining",
+      "message_id": "msg_011",
+      "strategy": "regular",
+      "autoSend": false,
+      "template": "\u26a0\ufe0f Volume divergence on [T] at [TIME_ET]. Price making new highs but volume declining \u2014 [VOL]. RSI [RSI], MACD [MACD]. Move not confirmed. Reversal risk high \u2014 scale out?"
+    },
+    {
+      "id": "alert_round",
+      "condition": "Price within $0.03 of round number",
+      "severity": "info",
+      "label": "Round number test",
+      "description": "Price approaching round dollar level",
+      "message_id": "msg_012",
+      "strategy": "all",
+      "autoSend": false,
+      "template": "Round number test on [T] at [TIME_ET]. Price [P] approaching key level. RSI [RSI], Vol [VOL], Tape [TAPE]. Expect wall or slow tape \u2014 break or reject?"
+    },
+    {
+      "id": "alert_news",
+      "condition": "New news article for ticker",
+      "severity": "info",
+      "label": "News alert",
+      "description": "Breaking news detected for this ticker",
+      "message_id": "msg_001",
+      "strategy": "all",
+      "autoSend": false,
+      "template": "\ud83d\udcf0 News on [T] at [TIME_ET]. Price [P], Vol [VOL]. Analyze catalyst: is this a real move or a trap? Go or no-go?"
     }
   ],
   "settings": {

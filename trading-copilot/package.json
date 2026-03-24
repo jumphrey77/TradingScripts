@@ -4,7 +4,7 @@
   "description": "AI-powered day trading copilot with Alpaca integration",
   "main": "src/main/main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "electron . --remote-debugging-port=9222",
     "dev": "NODE_ENV=development electron .",
     "build": "electron-builder"
   },

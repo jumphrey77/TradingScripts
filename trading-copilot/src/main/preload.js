@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld('copilot', {
   getMessages:  ()         => ipcRenderer.invoke('messages:get'),
   saveMessages: (messages) => ipcRenderer.send('messages:save', messages),
 
+  // ── Trade execution ────────────────────────────────────────────────────────
+  submitOrder:   (order) => ipcRenderer.invoke('trade:submitOrder', order),
+  getPositions:  ()      => ipcRenderer.invoke('trade:getPositions'),
+  getOrders:     ()      => ipcRenderer.invoke('trade:getOrders'),
+  getAccount:    ()      => ipcRenderer.invoke('trade:getAccount'),
+
   // ── Window ─────────────────────────────────────────────────────────────────
   setAlwaysOnTop: (val) => ipcRenderer.send('app:setAlwaysOnTop', val),
 

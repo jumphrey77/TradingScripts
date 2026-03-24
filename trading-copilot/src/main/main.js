@@ -205,3 +205,126 @@ ipcMain.on('messages:save', (event, messages) => {
   const msgPath = path.join(__dirname, '../../data/claude_messages.json')
   fs.writeFileSync(msgPath, JSON.stringify(messages, null, 2))
 })
+
+// ── Safe fetch helper for main process ────────────────────────────────────────
+async function apiFetch(url, options = {}) {
+  // Use built-in fetch if available (Electron 21+/Node 18+)
+  if (typeof fetch !== 'undefined') {
+    return fetch(url, options)
+  }
+  // Fallback to Node https module
+  const https  = require('https')
+  const http   = require('http')
+  const { URL } = require('url')
+  const parsed = new URL(url)
+  const client = parsed.protocol === 'https:' ? https : http
+
+  return new Promise((resolve, reject) => {
+    const reqOptions = {
+      hostname: parsed.hostname,
+      port:     parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path:     parsed.pathname + parsed.search,
+      method:   options.method || 'GET',
+      headers:  options.headers || {}
+    }
+    const req = client.request(reqOptions, (res) => {
+      let data = ''
+      res.on('data', chunk => data += chunk)
+      res.on('end', () => {
+        resolve({
+          ok:   res.statusCode >= 200 && res.statusCode < 300,
+          json: () => Promise.resolve(JSON.parse(data)),
+          text: () => Promise.resolve(data),
+          status: res.statusCode
+        })
+      })
+    })
+    req.on('error', reject)
+    if (options.body) req.write(options.body)
+    req.end()
+  })
+}
+
+// ── Paper trade order execution ────────────────────────────────────────────────
+ipcMain.handle('trade:submitOrder', async (event, order) => {
+  try {
+    const config  = ConfigManager.get()
+    const baseUrl = config.alpacaBaseUrl || 'https://paper-api.alpaca.markets'
+    // order payload is built fully in renderer and passed through
+    const payload = JSON.stringify(order)
+    console.log('[Trade] Submitting order:', payload)
+    const resp = await apiFetch(`${baseUrl}/v2/orders`, {
+      method:  'POST',
+      headers: {
+        'APCA-API-KEY-ID':     config.alpacaKey,
+        'APCA-API-SECRET-KEY': config.alpacaSecret,
+        'Content-Type':        'application/json'
+      },
+      body: payload
+    })
+    const data = await resp.json()
+    console.log('[Trade] Order response:', JSON.stringify(data).slice(0, 200))
+    if (data.code) {
+      // Alpaca error response has a code field
+      return { success: false, error: data.message || JSON.stringify(data) }
+    }
+    return { success: true, order: data }
+  } catch (e) {
+    console.error('[Trade] Order failed:', e.message)
+    return { success: false, error: e.message }
+  }
+})
+
+// ── Get open positions ─────────────────────────────────────────────────────────
+ipcMain.handle('trade:getPositions', async () => {
+  try {
+    const config  = ConfigManager.get()
+    const baseUrl = config.alpacaBaseUrl || 'https://paper-api.alpaca.markets'
+    const resp    = await apiFetch(`${baseUrl}/v2/positions`, {
+      headers: {
+        'APCA-API-KEY-ID':     config.alpacaKey,
+        'APCA-API-SECRET-KEY': config.alpacaSecret
+      }
+    })
+    const data = await resp.json()
+    return { success: true, positions: data }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
+// ── Get today's orders ────────────────────────────────────────────────────────
+ipcMain.handle('trade:getOrders', async () => {
+  try {
+    const config  = ConfigManager.get()
+    const baseUrl = config.alpacaBaseUrl || 'https://paper-api.alpaca.markets'
+    const resp    = await apiFetch(`${baseUrl}/v2/orders?status=all&limit=20&direction=desc`, {
+      headers: {
+        'APCA-API-KEY-ID':     config.alpacaKey,
+        'APCA-API-SECRET-KEY': config.alpacaSecret
+      }
+    })
+    const data = await resp.json()
+    return { success: true, orders: Array.isArray(data) ? data : [] }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
+// ── Get account info ───────────────────────────────────────────────────────────
+ipcMain.handle('trade:getAccount', async () => {
+  try {
+    const config  = ConfigManager.get()
+    const baseUrl = config.alpacaBaseUrl || 'https://paper-api.alpaca.markets'
+    const resp    = await apiFetch(`${baseUrl}/v2/account`, {
+      headers: {
+        'APCA-API-KEY-ID':     config.alpacaKey,
+        'APCA-API-SECRET-KEY': config.alpacaSecret
+      }
+    })
+    const data = await resp.json()
+    return { success: true, account: data }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
