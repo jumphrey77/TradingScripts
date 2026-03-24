@@ -9,6 +9,9 @@
 /node_modules/
 /dist/
 /build/
+/zip-mover/DELETED/
+/zip-mover/*.zip
+/zip-mover/node_modules/
 
 # -----------------------------
 # Python
