@@ -28,11 +28,14 @@ class AlpacaService extends EventEmitter {
   // ── Initialize Alpaca client ───────────────────────────────────────────────
   _init() {
     try {
+      const feed = this.config.dataFeed || 'iex'
+      console.log('[Alpaca] Initializing with feed:', feed)
       this.client = new Alpaca({
-        keyId:    this.config.alpacaKey,
+        keyId:     this.config.alpacaKey,
         secretKey: this.config.alpacaSecret,
-        baseUrl:  this.config.alpacaBaseUrl,
-        paper:    this.config.paper !== false
+        baseUrl:   this.config.alpacaBaseUrl,
+        paper:     this.config.paper !== false,
+        feed                   // 'iex' or 'sip' — determines WS endpoint
       })
       this._connect()
     } catch (e) {
@@ -44,7 +47,10 @@ class AlpacaService extends EventEmitter {
   _connect() {
     try {
       console.log('[WS] Initializing data_stream_v2...')
+      // Feed is set at Alpaca constructor time — data_stream_v2 uses whichever
+      // feed was passed to new Alpaca({ feed }) — 'iex' or 'sip'
       this.socket = this.client.data_stream_v2
+      console.log('[WS] Connecting with feed:', this.config.dataFeed || 'iex')
       console.log('[WS] Socket object type:', typeof this.socket)
       console.log('[WS] Socket methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(this.socket)).join(', '))
 
@@ -157,8 +163,8 @@ class AlpacaService extends EventEmitter {
           'APCA-API-SECRET-KEY': this.config.alpacaSecret
         }
         const [r5, r15] = await Promise.all([
-          fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=5Min&limit=50&feed=iex`, { headers }),
-          fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=15Min&limit=50&feed=iex`, { headers })
+          fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=5Min&limit=50&feed=${this._feed()}`, { headers }),
+          fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=15Min&limit=50&feed=${this._feed()}`, { headers })
         ])
         const d5  = await r5.json()
         const d15 = await r15.json()
@@ -187,7 +193,7 @@ class AlpacaService extends EventEmitter {
 
       // ── 1. Snapshot — latest quote, trade, minute bar, daily bar ─────────
       const snapResp = await fetch(
-        `${dataUrl}/v2/stocks/${ticker}/snapshot?feed=iex`,
+        `${dataUrl}/v2/stocks/${ticker}/snapshot?feed=${this._feed()}`,
         { headers }
       )
       const snap = await snapResp.json()
@@ -227,9 +233,9 @@ class AlpacaService extends EventEmitter {
 
       // ── 2. Historical bars — 1m, 5m, 15m in parallel ────────────────────
       const [barsResp, bars5mResp, bars15mResp] = await Promise.all([
-        fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=1Min&limit=50&feed=iex`,  { headers }),
-        fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=5Min&limit=50&feed=iex`,  { headers }),
-        fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=15Min&limit=50&feed=iex`, { headers })
+        fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=1Min&limit=50&feed=${this._feed()}`,  { headers }),
+        fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=5Min&limit=50&feed=${this._feed()}`,  { headers }),
+        fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=15Min&limit=50&feed=${this._feed()}`, { headers })
       ])
       const barsData   = await barsResp.json()
       const bars5mData = await bars5mResp.json()
@@ -540,6 +546,11 @@ class AlpacaService extends EventEmitter {
     if (this.bars.length < period) return null
     const closes = this.bars.slice(-period).map(b => b.close)
     return parseFloat((closes.reduce((a, b) => a + b, 0) / period).toFixed(4))
+  }
+
+  // ── Data feed helper ──────────────────────────────────────────────────────
+  _feed() {
+    return this.config.dataFeed || 'iex'
   }
 
   // ── Volume Calculations ───────────────────────────────────────────────────

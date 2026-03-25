@@ -25,8 +25,9 @@
     body {
       background: var(--bg); color: var(--text);
       font-family: var(--font); font-size: 12px;
-      width: 480px; height: 520px;
+      width: 100%; height: 100vh;
       overflow: hidden; display: flex; flex-direction: column;
+      box-sizing: border-box;
     }
     .header { padding: 14px 16px 0; border-bottom: 0.5px solid var(--border); }
     .header h2 { font-size: 13px; font-weight: 600; letter-spacing: 0.04em; margin-bottom: 12px; }
@@ -38,9 +39,9 @@
     }
     .tab:hover { color: var(--text); }
     .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
-    .tab-body { flex: 1; overflow: hidden; }
-    .tab-panel { display: none; padding: 16px; height: 100%; }
-    .tab-panel.active { display: block; }
+    .tab-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+    .tab-panel { display: none; padding: 16px; flex: 1; overflow-y: auto; box-sizing: border-box; }
+    .tab-panel.active { display: flex; flex-direction: column; }
     .field { margin-bottom: 12px; }
     label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
     input[type="text"], input[type="password"], select {
@@ -107,6 +108,17 @@
           <option value="live">Live Trading  (real money)</option>
         </select>
       </div>
+
+      <div class="field">
+        <label>Market Data Feed</label>
+        <select id="data-feed">
+          <option value="iex">IEX  (free — ~2% market coverage)</option>
+          <option value="sip">SIP  (Algo Trader Plus — 100% coverage + premarket)</option>
+        </select>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">
+          Switch to SIP if you have Algo Trader Plus subscription
+        </div>
+      </div>
       <div class="test-row">
         <button class="test-btn" onclick="testConnection()">Test Connection</button>
         <div id="test-result"></div>
@@ -119,6 +131,12 @@
       <div class="toggle-row">
         <div><div class="toggle-label">Always on top</div><div class="toggle-hint">Float panel above other windows</div></div>
         <label class="toggle"><input type="checkbox" id="always-on-top"/><span class="slider"></span></label>
+      </div>
+
+      <div class="section-title section-gap">Panels</div>
+      <div class="toggle-row">
+        <div><div class="toggle-label">Allow Reposition Panels</div><div class="toggle-hint">Hover bottom-right of a panel to reveal ▲▼ move arrows</div></div>
+        <label class="toggle"><input type="checkbox" id="allow-reposition"/><span class="slider"></span></label>
       </div>
 
       <div class="section-title section-gap">Behavior</div>
@@ -226,6 +244,8 @@
     if (cfg.alpacaKey)    document.getElementById('api-key').value               = cfg.alpacaKey
     if (cfg.alpacaSecret) document.getElementById('api-secret').value            = cfg.alpacaSecret
     document.getElementById('paper-mode').value         = cfg.paper !== false ? 'paper' : 'live'
+    document.getElementById('data-feed').value           = cfg.dataFeed || 'iex'
+    document.getElementById('allow-reposition').checked  = cfg.allowReposition === true
     document.getElementById('always-on-top').checked    = cfg.alwaysOnTop === true
     document.getElementById('auto-copy-select').checked = cfg.autoCopyOnSelect !== false
     document.getElementById('alert-sound').checked      = cfg.alertSound !== false
@@ -243,6 +263,8 @@
       alpacaBaseUrl:    paper ? 'https://paper-api.alpaca.markets' : 'https://api.alpaca.markets',
       alpacaDataUrl:    'https://data.alpaca.markets',
       paper,
+      dataFeed:         document.getElementById('data-feed').value,
+      allowReposition:  document.getElementById('allow-reposition').checked,
       alwaysOnTop:      document.getElementById('always-on-top').checked,
       autoCopyOnSelect: document.getElementById('auto-copy-select').checked,
       alertSound:       document.getElementById('alert-sound').checked,

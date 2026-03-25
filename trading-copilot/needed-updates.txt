@@ -1,0 +1,52 @@
+-------------------------------------------
+TRADING CO-PILOT
+-------------------------------------------
+TAPE SECTION
+ALERT SECTION
+SETTINGS
+
+1.  When I enter a Symbol and hit Enter, Go Into Research Mode
+
+FUTE: Watch LIst
+
+APP
+1. Log Tab has a red pill displayed always - As soon as I look at the tab, assume its read, remove until new Alert
+2. When Docking Right or Left, limit the height near bottom so is doesnt cover the Windows TaskBar
+3. Id like to explore ToolTips on the alerts (configurable in Settings).  Each alert with display the Key Data in the alert when it fired Example:  VWAP Lost - Data in Tip message would have Price and VWAP and should have a Setiment (BUllish or Bearish, or Buy or Sell).  The descripption should be more verbose.  Sample template for Tool Tip. The Alert currently has a Dot next to the title.  If an alert is Bearish, make it red. Bullish, Green. If appropriate for the alerts
+4. Price.  Should have 4 digits on lower price stock?
+5. Price.  Next to price, display a green ^ or red V ,then the difference in price, then % in ()
+6. If I selecte the Research Tab, Assume "Research" mode.  Same with Trade tabe and trade mode.
+7. The Footer Status : Says Disconnected and IEX when we are live with SIP
+8. Combine the RSI Indictors at the top and display in one box  "RSI 1m / 5m / 15m " Similar to Bid / Ask. Use Fulle width for now.
+
+9. Add A Price Indicator (Full Width), Very Similat to what we have for Volume
+	Today			
+	===========H===========================
+	L $0.62				$1.20 H
+
+
+FUTURE:
+UI Major Change.  
+1. Ability to move sections Up / Down with ^v.  Example, TAPE is below ALerts. Click ^, it moves up.  Save this state. Only display ^v if I hover over lower Right corner.  Add a Setting Option (Allow Resposition Panels.  If checked, on mouse over lower right will appear.
+2. Ability to Resize some Sections (hight) (Alerts)(TAPE) 
+
+ALERTS
+1. Make sure the News Alert doesnt hit the same news repeatedly (not sure if it is).  This morning it hit a few times (same news)
+
+
+
+SETTINGS.  
+1. On Open, Center dialog on Screen.  Currently if docked Right, window splits two screens.
+2. The Message Tab lower portion is cut off. No Scroll. Window too small
+3. Window shouldnt be able to be minimized.
+4. Add Allow Resposition Panels (see above)
+
+QUESTIONS:
+3. On Stocks that are less than $1.00 (maybe even $5), 
+    a. price needs to show 4 digits
+    b. RoundNumber test .  Are you lookin at .51  or .50?  Because .54, .55, .56 are round number alerts on stocks this price.
+4.  RSI Overbought - 1m / 5m ?  Just RSI(14)?
+
+TAPE SECTION - 
+1.  We have an alert on Tape - bid / asks dominate.  Next to the word 
+    TAPE, add a horiz bar of the last 10, (left most current) .Count show RRRRRRRGGG (but use colors) or a status of the battle.

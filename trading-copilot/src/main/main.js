@@ -31,7 +31,8 @@ function createMainWindow() {
       contextIsolation: true,
       nodeIntegration: false
     },
-    alwaysOnTop: config.alwaysOnTop === true,
+    alwaysOnTop:       config.alwaysOnTop === true,
+    alwaysOnTopLevel:  'screen-saver',
     frame: true,
     resizable: true
   })
@@ -56,23 +57,27 @@ function createConfigWindow() {
   }
 
   configWindow = new BrowserWindow({
-    width:     500,
-    height:    560,
-    minWidth:  500,
-    maxWidth:  500,
-    title:  'Settings',
-    parent: mainWindow,
-    modal:  false,
+    width:     520,
+    height:    640,
+    minWidth:  520,
+    minHeight: 500,
+    title:     'Settings',
+    parent:    mainWindow,
+    modal:     false,
+    minimizable:  false,        // SET-4: no minimize
+    maximizable:  false,        // prevent maximize
+    center:       true,         // SET-2: always center on screen
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false
     },
-    resizable: false
+    resizable: true             // allow taller for Messages tab
   })
 
   configWindow.loadFile(path.join(__dirname, '../renderer/config.html'))
   configWindow.setMenu(null)
+  configWindow.center()        // force center even if docked parent
 
   configWindow.on('closed', () => {
     configWindow = null
@@ -173,6 +178,8 @@ ipcMain.on('config:save', (event, config) => {
   cleanup()
   startAlpaca(config)
   if (configWindow) configWindow.close()
+  // Tell renderer to re-subscribe current ticker with new feed
+  if (mainWindow) mainWindow.webContents.send('alpaca:resubscribe')
 })
 
 // Toggle alwaysOnTop live from renderer
@@ -184,7 +191,8 @@ ipcMain.on('app:openExternal', (event, url) => {
 })
 
 ipcMain.on('app:setAlwaysOnTop', (event, value) => {
-  if (mainWindow) mainWindow.setAlwaysOnTop(value)
+  // 'screen-saver' level ensures window stays above fullscreen/maximized apps
+  if (mainWindow) mainWindow.setAlwaysOnTop(value, value ? 'screen-saver' : 'normal')
   const config = ConfigManager.get()
   config.alwaysOnTop = value
   ConfigManager.save(config)

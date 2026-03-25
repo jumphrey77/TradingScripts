@@ -5,11 +5,13 @@ AI-powered day trading panel with Alpaca real-time data and Claude integration.
 ## Setup
 
 ### 1. Install dependencies
+
 ```bash
 npm install
 ```
 
 ### 2. Configure credentials
+
 ```bash
 cp .env.template .env
 # Edit .env with your Alpaca API key and secret
@@ -18,6 +20,8 @@ cp .env.template .env
 Or launch the app and use the Settings (⚙) button.
 
 ### 3. Get your Alpaca API key
+
+
 1. Go to https://app.alpaca.markets
 2. Switch to Paper Trading account (top left dropdown)
 3. Click "API Keys" in the right sidebar
@@ -25,14 +29,17 @@ Or launch the app and use the Settings (⚙) button.
 5. **Save your Secret Key immediately** — shown only once
 
 ### 4. Run
+
 ```bash
 npm start          # production
 npm run dev        # development (with DevTools)
 ```
 
+
 ---
 
 ## How to use
+
 
 1. **Enter ticker** in the top input, press Enter to subscribe
 2. **Select strategy**: Regular or Scalp
@@ -41,6 +48,7 @@ npm run dev        # development (with DevTools)
 5. **Set stop and targets** in the trade levels section
 6. **ShareX hotkeys** capture L2 screenshots → Ctrl+V into Claude chat
 7. **Message dropdown** → select a preset → preview → Send ↗ copies to clipboard → Ctrl+V
+
 
 ---
 
@@ -73,12 +81,13 @@ trading-copilot/
 └── package.json
 ```
 
+
 ---
 
 ## Placeholders reference
 
 | Placeholder | Value |
-|---|---|
+|----|----|
 | `[T]` | Ticker symbol |
 | `[P]` | Current price |
 | `[E]` | Entry price |
@@ -95,10 +104,13 @@ trading-copilot/
 | `[STRAT]` | Strategy |
 | `[TIME_ET]` | Current ET time |
 
+
 ---
 
 ## Phases
 
-- **Phase 1 (now)**: Data display + clipboard-based Claude messaging
-- **Phase 2**: Auto-send alerts to Claude via API
-- **Phase 3**: Alpaca order execution from panel buttons
+* **Phase 1 (now)**: Data display + clipboard-based Claude messaging
+* **Phase 2**: Auto-send alerts to Claude via API
+* **Phase 3**: Alpaca order execution from panel buttons
+
+

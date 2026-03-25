@@ -10,17 +10,28 @@ const path = require('path')
 const CONFIG_PATH = path.join(__dirname, '../../config/user-config.json')
 
 const DEFAULTS = {
-  alpacaKey:       '',
-  alpacaSecret:    '',
-  alpacaBaseUrl:   'https://paper-api.alpaca.markets',
-  alpacaDataUrl:   'https://data.alpaca.markets',
-  paper:           true,
-  defaultStrategy: 'regular',
-  defaultMode:     'off',
-  alertSound:      true,
-  refreshMs:       1000,
-  autoSendEnabled: false,
-  alertCooldownMs: 30000
+  alpacaKey:          '',
+  alpacaSecret:       '',
+  alpacaBaseUrl:      'https://paper-api.alpaca.markets',
+  alpacaDataUrl:      'https://data.alpaca.markets',
+  paper:              true,
+  defaultStrategy:    'regular',
+  defaultMode:        'off',
+  alertSound:         true,
+  refreshMs:          1000,
+  autoSendEnabled:    false,
+  alertCooldownMs:    30000,
+  alwaysOnTop:        false,
+  autoCopyOnSelect:   true,
+  dataFeed:           'iex',   // 'iex' (free) or 'sip' (Algo Trader Plus)
+  allowReposition:    false,   // show ^v arrows to reorder panels
+  panelOrder:         null,    // saved panel order array
+  tradePresets: [
+    { name: 'Conservative', sl: 1.0, t1: 2.0, t2: 4.0 },
+    { name: 'Standard',     sl: 2.0, t1: 3.0, t2: 6.0 },
+    { name: 'Aggressive',   sl: 3.0, t1: 5.0, t2: 10.0 },
+    { name: 'Scalp',        sl: 0.5, t1: 1.0, t2: 2.0 }
+  ]
 }
 
 let _config = { ...DEFAULTS }

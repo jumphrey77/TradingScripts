@@ -14,7 +14,8 @@ contextBridge.exposeInMainWorld('copilot', {
   onBar:        (cb) => ipcRenderer.on('market:bar',        (_e, d) => cb(d)),
   onIndicators: (cb) => ipcRenderer.on('market:indicators', (_e, d) => cb(d)),
   onAlert:      (cb) => ipcRenderer.on('market:alert',      (_e, d) => cb(d)),
-  onStatus:     (cb) => ipcRenderer.on('alpaca:status',     (_e, d) => cb(d)),
+  onStatus:      (cb) => ipcRenderer.on('alpaca:status',      (_e, d) => cb(d)),
+  onResubscribe: (cb) => ipcRenderer.on('alpaca:resubscribe', ()       => cb()),
 
   // ── Actions (renderer → main) ──────────────────────────────────────────────
   subscribe:      (ticker)  => ipcRenderer.send('market:subscribe', ticker),

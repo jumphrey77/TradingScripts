@@ -960,3 +960,70 @@ select:focus, .ticker-in:focus, input:focus {
   font-family: var(--font-mono);
   white-space: nowrap;
 }
+
+/* ── Reorderable panels ───────────────────────────────────────── */
+.reorder-panel {
+  position: relative;
+}
+
+.panel-reorder-handle {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.reorder-panel:hover .panel-reorder-handle:not(.hidden) {
+  opacity: 1;
+}
+.panel-reorder-handle:not(.hidden) {
+  opacity: 0;
+}
+
+.panel-move-btn {
+  font-size: 10px;
+  padding: 2px 5px;
+  background: var(--bg3);
+  border: 0.5px solid var(--border2);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  line-height: 1;
+}
+.panel-move-btn:hover {
+  color: var(--text);
+  border-color: var(--blue);
+  background: var(--blue-bg);
+}
+
+/* ── Panel resize handle ──────────────────────────────────────── */
+.resize-handle {
+  width: 100%;
+  height: 6px;
+  cursor: ns-resize;
+  background: transparent;
+  border-bottom: 2px dotted var(--border);
+  margin: 2px 0 4px;
+  transition: border-color 0.15s;
+  position: relative;
+}
+.resize-handle::after {
+  content: '⋯';
+  position: absolute;
+  left: 50%;
+  top: -6px;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--border);
+  letter-spacing: 2px;
+}
+.resize-handle:hover {
+  border-color: var(--blue);
+}
+.resize-handle:hover::after {
+  color: var(--blue);
+}

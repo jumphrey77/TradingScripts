@@ -128,45 +128,69 @@
         <canvas id="mini-chart" width="340" height="56"></canvas>
       </div>
 
-      <hr class="divider"/>
+      <!-- Reorderable panels container -->
+      <div id="panels-container">
 
-      <!-- Alerts (current ticker) -->
-      <div class="section-header-row">
-        <span class="section-label">alerts</span>
-        <div id="send-all-row" class="hidden">
-          <button onclick="sendAllAlerts()" class="btn-send-all-sm">Send All ↗</button>
+        <div class="reorder-panel" data-panel-id="alerts">
+          <hr class="divider"/>
+          <div class="section-header-row">
+            <span class="section-label">alerts</span>
+            <div id="send-all-row" class="hidden">
+              <button onclick="sendAllAlerts()" class="btn-send-all-sm">Send All ↗</button>
+            </div>
+          </div>
+          <div id="alerts-container" class="resizable-panel" style="min-height:60px;max-height:300px;overflow-y:auto;">
+            <div class="no-alerts">No alerts — monitoring active</div>
+          </div>
+          <div class="resize-handle" data-target="alerts-container" title="Drag to resize"></div>
+          <div class="panel-reorder-handle hidden">
+            <button class="panel-move-btn" onclick="movePanel('alerts','up')" title="Move up">▲</button>
+            <button class="panel-move-btn" onclick="movePanel('alerts','down')" title="Move down">▼</button>
+          </div>
         </div>
-      </div>
-      <div id="alerts-container">
-        <div class="no-alerts">No alerts — monitoring active</div>
-      </div>
 
-      <hr class="divider"/>
-
-      <!-- Tape -->
-      <div class="section-label">tape</div>
-      <div id="tape-container" class="tape-wrap">
-        <div class="no-tape">Waiting for data...</div>
-      </div>
-
-      <hr class="divider"/>
-
-      <!-- Send to Claude -->
-      <div class="section-label">send to claude</div>
-      <div class="msg-selector">
-        <select id="message-select" class="msg-dropdown">
-          <option value="">Select message...</option>
-        </select>
-        <div id="msg-preview" class="msg-preview hidden">—</div>
-        <div class="msg-btn-row">
-          <button id="send-claude-btn" class="btn btn-claude" disabled>Send ↗</button>
+        <div class="reorder-panel" data-panel-id="tape">
+          <hr class="divider"/>
+          <div class="section-label">tape</div>
+          <div id="tape-container" class="tape-wrap resizable-panel" style="min-height:60px;max-height:300px;overflow-y:auto;">
+            <div class="no-tape">Waiting for data...</div>
+          </div>
+          <div class="resize-handle" data-target="tape-container" title="Drag to resize"></div>
+          <div class="panel-reorder-handle hidden">
+            <button class="panel-move-btn" onclick="movePanel('tape','up')" title="Move up">▲</button>
+            <button class="panel-move-btn" onclick="movePanel('tape','down')" title="Move down">▼</button>
+          </div>
         </div>
-      </div>
 
-      <!-- Favorite buttons -->
-      <hr class="divider"/>
-      <div class="section-label">quick send</div>
-      <div id="favorites-container" class="favorites-container"></div>
+        <div class="reorder-panel" data-panel-id="send-claude">
+          <hr class="divider"/>
+          <div class="section-label">send to claude</div>
+          <div class="msg-selector">
+            <select id="message-select" class="msg-dropdown">
+              <option value="">Select message...</option>
+            </select>
+            <div id="msg-preview" class="msg-preview hidden">—</div>
+            <div class="msg-btn-row">
+              <button id="send-claude-btn" class="btn btn-claude" disabled>Send ↗</button>
+            </div>
+          </div>
+          <div class="panel-reorder-handle hidden">
+            <button class="panel-move-btn" onclick="movePanel('send-claude','up')" title="Move up">▲</button>
+            <button class="panel-move-btn" onclick="movePanel('send-claude','down')" title="Move down">▼</button>
+          </div>
+        </div>
+
+        <div class="reorder-panel" data-panel-id="quick-send">
+          <hr class="divider"/>
+          <div class="section-label">quick send</div>
+          <div id="favorites-container" class="favorites-container"></div>
+          <div class="panel-reorder-handle hidden">
+            <button class="panel-move-btn" onclick="movePanel('quick-send','up')" title="Move up">▲</button>
+            <button class="panel-move-btn" onclick="movePanel('quick-send','down')" title="Move down">▼</button>
+          </div>
+        </div>
+
+      </div><!-- /#panels-container -->
 
     </div><!-- /#tab-research -->
 

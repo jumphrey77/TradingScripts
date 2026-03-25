@@ -62,8 +62,11 @@ async function init() {
     const cfg = await window.copilot.getConfig()
     state.autoCopyOnSelect = cfg.autoCopyOnSelect !== false
     state.tradePresets     = cfg.tradePresets || []
+    state.allowReposition  = cfg.allowReposition === true
     renderPresets()
     populatePresetDropdown()
+    initPanelReorder()
+    initResizeHandles()
   }
   bindControls()
   await loadMessages()
@@ -310,6 +313,28 @@ function setupAlpacaListeners() {
   window.copilot.onAlert(data => {
     AlertManager.add(data)
     updateAlertBadge()
+  })
+
+  // Re-subscribe current ticker after config save + re-apply UI settings
+  window.copilot.onResubscribe(async () => {
+    // Reload config to pick up any changed settings (feed, reposition, etc.)
+    if (window.copilot.getConfig) {
+      const cfg = await window.copilot.getConfig()
+      state.allowReposition = cfg.allowReposition === true
+      state.tradePresets    = cfg.tradePresets || []
+      renderPresets()
+      populatePresetDropdown()
+      // Re-apply repositioning hover state immediately — no restart needed
+      setupRepositionHovers(state.allowReposition)
+    }
+    if (state.ticker) {
+      console.log('[Panel] Re-subscribing', state.ticker, 'after config change')
+      window.copilot.unsubscribe(state.ticker)
+      setTimeout(() => {
+        window.copilot.subscribe(state.ticker)
+        window.copilot.setTradeContext({ ticker: state.ticker, strategy: state.strategy })
+      }, 500)
+    }
   })
 }
 
@@ -1210,5 +1235,112 @@ function updateAlertBadge() {
     badge.classList.add('hidden')
   }
 }
+
+
+// ── Panel reordering ─────────────────────────────────────────────────────────
+const DEFAULT_PANEL_ORDER = ['alerts', 'tape', 'send-claude', 'quick-send']
+
+function initPanelReorder() {
+  // Load saved order
+  let order = DEFAULT_PANEL_ORDER
+  try {
+    const saved = localStorage.getItem('panelOrder')
+    if (saved) order = JSON.parse(saved)
+  } catch(e) {}
+  applyPanelOrder(order)
+
+  // Load reposition setting
+  const allowRepo = state.allowReposition
+  setupRepositionHovers(allowRepo)
+}
+
+function applyPanelOrder(order) {
+  const container = document.getElementById('panels-container')
+  if (!container) return
+  order.forEach(panelId => {
+    const el = container.querySelector('[data-panel-id="' + panelId + '"]')
+    if (el) container.appendChild(el)
+  })
+}
+
+function movePanel(panelId, direction) {
+  const container = document.getElementById('panels-container')
+  if (!container) return
+  const panels = Array.from(container.querySelectorAll('.reorder-panel'))
+  const idx    = panels.findIndex(p => p.dataset.panelId === panelId)
+  if (idx === -1) return
+
+  if (direction === 'up' && idx > 0) {
+    container.insertBefore(panels[idx], panels[idx - 1])
+  } else if (direction === 'down' && idx < panels.length - 1) {
+    container.insertBefore(panels[idx + 1], panels[idx])
+  }
+
+  // Save new order
+  const newOrder = Array.from(container.querySelectorAll('.reorder-panel'))
+    .map(p => p.dataset.panelId)
+  try { localStorage.setItem('panelOrder', JSON.stringify(newOrder)) } catch(e) {}
+}
+
+function setupRepositionHovers(enabled) {
+  document.querySelectorAll('.reorder-panel').forEach(panel => {
+    const handle = panel.querySelector('.panel-reorder-handle')
+    if (!handle) return
+
+    if (!enabled) {
+      handle.classList.add('hidden')
+      return
+    }
+
+    panel.addEventListener('mouseenter', () => handle.classList.remove('hidden'))
+    panel.addEventListener('mouseleave', () => handle.classList.add('hidden'))
+  })
+}
+
+
+
+// ── Panel resize handles ──────────────────────────────────────────────────────
+function initResizeHandles() {
+  document.querySelectorAll('.resize-handle').forEach(handle => {
+    const targetId = handle.dataset.target
+    const target   = document.getElementById(targetId)
+    if (!target) return
+
+    // Restore saved height
+    try {
+      const saved = localStorage.getItem('panelHeight:' + targetId)
+      if (saved) target.style.height = saved + 'px'
+    } catch(e) {}
+
+    let startY = 0, startH = 0, dragging = false
+
+    handle.addEventListener('mousedown', e => {
+      dragging = true
+      startY   = e.clientY
+      startH   = target.offsetHeight
+      document.body.style.cursor   = 'ns-resize'
+      document.body.style.userSelect = 'none'
+      e.preventDefault()
+    })
+
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return
+      const newH = Math.max(60, Math.min(500, startH + (e.clientY - startY)))
+      target.style.height = newH + 'px'
+    })
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return
+      dragging = false
+      document.body.style.cursor    = ''
+      document.body.style.userSelect = ''
+      // Save height
+      try {
+        localStorage.setItem('panelHeight:' + targetId, target.offsetHeight)
+      } catch(e) {}
+    })
+  })
+}
+
 
 init()
