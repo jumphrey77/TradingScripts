@@ -4,13 +4,13 @@
   "description": "AI-powered day trading copilot with Alpaca integration",
   "main": "src/main/main.js",
   "scripts": {
-    "start": "electron . ",
-    "dev": "NODE_ENV=development electron .",
+    "start": "electron .",
+    "dev": "cross-env NODE_ENV=development electron .",
     "build": "electron-builder"
   },
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^3.0.0",
-    "cross-env": "^10.1.0",
+    "cross-env": "^7.0.3",
     "dotenv": "^16.0.0",
     "ws": "^8.0.0"
   },

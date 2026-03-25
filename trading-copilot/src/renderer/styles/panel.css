@@ -1027,3 +1027,91 @@ select:focus, .ticker-in:focus, input:focus {
 .resize-handle:hover::after {
   color: var(--blue);
 }
+
+/* ── Combined RSI box ─────────────────────────────────────────── */
+.metric-full {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+.rsi-combined {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rsi-combined .metric-val { font-size: 16px; }
+.rsi-sep { color: var(--muted); font-size: 12px; }
+.rsi-tf-label { font-size: 9px; color: var(--muted); }
+
+/* ── Price range bar ──────────────────────────────────────────── */
+.range-wrap {
+  margin-bottom: 8px;
+}
+.range-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.range-pct { font-size: 10px; }
+.range-track {
+  position: relative;
+  height: 4px;
+  background: var(--bg3);
+  border-radius: 2px;
+  margin-bottom: 3px;
+}
+.range-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(to right, rgba(239,68,68,0.5), rgba(34,197,94,0.7));
+  border-radius: 2px;
+}
+.range-cursor {
+  position: absolute;
+  top: -3px;
+  width: 3px;
+  height: 10px;
+  background: var(--text);
+  border-radius: 1px;
+  transform: translateX(-50%);
+}
+.range-foot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+}
+.range-low  { color: var(--red); }
+.range-high { color: var(--green); }
+
+/* ── Price change indicator ───────────────────────────────────── */
+.price-change {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* ── RSI combined panel spacing fix ──────────────────────────── */
+.metric.metric-full {
+  margin-bottom: 6px;
+}
+
+/* ── Range bar panel — match metric card style ────────────────── */
+.range-wrap {
+  background: var(--bg2);
+  border: 0.5px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  margin-bottom: 6px;
+}
+
+/* ── Alert snapshot debug line ────────────────────────────────── */
+.alert-snap {
+  font-size: 9px;
+  color: var(--muted);
+  opacity: 0.75;
+  margin-top: 1px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}

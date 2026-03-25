@@ -31,6 +31,12 @@ const state = {
   volCurrent:  0,
   volAvg:      0,
   volHigh:     0,   // session high volume bar
+  dayLow:      null,
+  dayHigh:     null,
+  dayOpen:     null,
+  sessionHigh: null,
+  sessionLow:  null,
+  sessionOpen: null,
   high:      null,
   low:       null,
   tape:      'Unknown',
@@ -100,12 +106,34 @@ function bindControls() {
       state.bars    = []
       state.price   = null
       state.volHigh = 0
+      state.dayLow     = null
+      state.dayHigh    = null
+      state.dayOpen    = null
+      state.sessionHigh = null
+      state.sessionLow  = null
+      state.sessionOpen = null
       state.rsi    = null
       state.macd   = null
       state.vwap   = null
       // Switch alert cache to new ticker
       if (typeof AlertManager !== 'undefined') AlertManager.setTicker(ticker)
       updateAlertBadge()
+      // UI-9: auto switch to research mode when ticker entered
+      if (state.mode === 'off' || state.mode === 'intrade') {
+        const modeEl = $('mode-select')
+        if (modeEl) modeEl.value = 'research'
+        state.mode = 'research'
+        updateModeUI()
+        // Also switch to Research tab
+        switchTab('research')
+      }
+      // Update feed label with current ticker
+      if (window.copilot.getConfig) {
+        window.copilot.getConfig().then(cfg => {
+          const el = $('feed-label')
+          if (el) el.textContent = (cfg.dataFeed || 'iex').toUpperCase() + ' · ' + ticker
+        })
+      }
       const tape = $('tape-container')
       if (tape) tape.innerHTML = '<div class="no-tape">Waiting for data...</div>'
       // Reset display
@@ -266,8 +294,16 @@ function setupAlpacaListeners() {
     state.connected = data.connected
     $('status-dot').className = 'status-dot ' + (data.connected ? 'connected' : 'disconnected')
     $('status-text').textContent = data.connected
-      ? `Alpaca · ${data.paper ? 'paper' : 'live'}`
+      ? 'Alpaca · ' + (data.paper ? 'paper' : 'live')
       : 'Disconnected'
+    // BUG-5: update feed label from actual config
+    if (window.copilot.getConfig) {
+      window.copilot.getConfig().then(cfg => {
+        const feed = (cfg.dataFeed || 'iex').toUpperCase()
+        const el = $('feed-label')
+        if (el) el.textContent = feed + ' · ' + (state.ticker || '—')
+      })
+    }
   })
 
   window.copilot.onQuote(data => {
@@ -297,6 +333,16 @@ function setupAlpacaListeners() {
     state.volCurrent = data.bar?.volume || 0
     state.volAvg     = data.volAvg
     if (state.volCurrent > state.volHigh) state.volHigh = state.volCurrent
+    // Track day range from bar data
+    // Use session H/L from daily bar (accurate), fallback to bar range
+    if (data.sessionHigh) state.sessionHigh = data.sessionHigh
+    if (data.sessionLow)  state.sessionLow  = data.sessionLow
+    if (data.sessionOpen) state.sessionOpen = data.sessionOpen
+    // Legacy fallback
+    if (data.high) state.dayHigh = state.sessionHigh || data.high
+    if (data.low)  state.dayLow  = state.sessionLow  || data.low
+    if (data.bar?.open && !state.dayOpen) state.dayOpen = state.sessionOpen || data.bar.open
+    updateRangeBar()
     state.high       = data.high
     state.low        = data.low
     state.bars       = data.bars || []
@@ -337,18 +383,40 @@ function setupAlpacaListeners() {
   })
 }
 
-// ── Display updates ────────────────────────────────────────────────────────────
+// ── Price formatting ─────────────────────────────────────────────────────────
+function fmtPrice(p) {
+  if (!p || isNaN(p)) return '--'
+  if (p < 10)  return '$' + p.toFixed(4)
+  if (p < 100) return '$' + p.toFixed(3)
+  return '$' + p.toFixed(2)
+}
+
+function fmtDiff(diff, base) {
+  if (!diff || !base) return null
+  const pct  = (diff / base * 100).toFixed(2)
+  const sign = diff >= 0 ? '^' : 'v'
+  const abs  = Math.abs(diff)
+  const cls  = diff >= 0 ? 'green' : 'red'
+  return { text: sign + ' ' + abs.toFixed(abs < 10 ? 4 : abs < 100 ? 3 : 2) + ' (' + pct + '%)', cls }
+}
+
 function updatePriceDisplay() {
   if (state.price === null || isNaN(state.price)) return
   const el     = $('price-display')
   const changeEl = $('change-display')
-  el.textContent = `$${state.price.toFixed(3)}`
+  // BUG-8: smart decimal places
+  el.textContent = fmtPrice(state.price)
 
-  // Price color based on vs VWAP when not in a position
-  if (state.vwap) {
-    const aboveVwap = state.price > state.vwap
-    el.className    = 'price-big ' + (aboveVwap ? 'green' : 'red')
-    changeEl.textContent = ''
+  // UI-1: show change vs VWAP
+  // Show change vs session open (true day change), fallback to VWAP
+  const ref = state.sessionOpen || state.dayOpen || state.vwap
+  if (ref) {
+    const result = fmtDiff(state.price - ref, ref)
+    if (result) {
+      changeEl.textContent = result.text
+      changeEl.className   = 'price-change ' + result.cls
+      el.className         = 'price-big ' + result.cls
+    }
   } else {
     changeEl.textContent = ''
     el.className = 'price-big'
@@ -781,73 +849,6 @@ function showToast(text) {
   toast._t = setTimeout(() => { toast.style.opacity = '0' }, 2000)
 }
 
-// ── Start ──────────────────────────────────────────────────────────────────────
-
-// Paper trade order submission
-async function submitOrder(side) {
-  if (!state.ticker) { showToast('Enter a ticker first'); return }
-
-  const qtyEl  = $('order-qty')
-  const qty    = parseInt(qtyEl?.value || 100)
-  const status = $('order-status')
-
-  if (isNaN(qty) || qty <= 0) { showToast('Invalid share quantity'); return }
-
-  const price  = state.price ? '$' + state.price.toFixed(3) : 'market price'
-  const action = side === 'buy' ? 'BUY' : 'SELL'
-  const msg    = action + ' ' + qty + ' shares of ' + state.ticker + ' at ' + price + ' (paper)?'
-  if (!confirm(msg)) return
-
-  const buyBtn  = $('buy-btn')
-  const sellBtn = $('sell-btn')
-  if (buyBtn)  buyBtn.disabled  = true
-  if (sellBtn) sellBtn.disabled = true
-  if (status)  status.textContent = 'Sending...'
-
-  try {
-    const result = await window.copilot.submitOrder({ ticker: state.ticker, qty, side })
-
-    if (result.success) {
-      const order     = result.order
-      const fillPrice = parseFloat(order.filled_avg_price || order.limit_price || state.price || 0)
-      const statusTxt = order.status || 'submitted'
-
-      if (status) {
-        status.textContent = action + ' ' + qty + ' @ $' + fillPrice.toFixed(3) + ' - ' + statusTxt
-        status.className   = 'order-status ' + (side === 'buy' ? 'order-ok' : 'order-sell')
-      }
-
-      if (side === 'buy' && fillPrice > 0) {
-        const entryIn = $('entry-input')
-        if (entryIn) {
-          entryIn.value   = fillPrice.toFixed(3)
-          state.entry     = fillPrice
-          state.entryTime = Date.now()
-          pushTradeContext()
-          updatePnL()
-          showToast('Entry set to $' + fillPrice.toFixed(3))
-        }
-      }
-      if (side === 'sell') {
-        showToast('SELL ' + qty + ' ' + state.ticker + ' submitted')
-      }
-      console.log('[Trade] ' + action + ' ' + qty + ' ' + state.ticker + ' - ' + statusTxt)
-
-    } else {
-      if (status) {
-        status.textContent = 'Error: ' + result.error
-        status.className   = 'order-status order-err'
-      }
-      showToast('Order failed: ' + result.error)
-    }
-  } catch (e) {
-    if (status) status.textContent = 'Error - see console'
-    console.error('[Trade] submitOrder error:', e)
-  } finally {
-    if (buyBtn)  buyBtn.disabled  = false
-    if (sellBtn) sellBtn.disabled = false
-  }
-}
 
 
 // ── Trade Form Logic ────────────────────────────────────────────────────────
@@ -1149,7 +1150,12 @@ function switchTab(name) {
   })
 
   // Populate log tab when switched to
-  if (name === 'log') renderLogTab()
+  if (name === 'log') {
+    renderLogTab()
+    // Clear badge when log tab is visited
+    const badge = document.getElementById('alert-badge')
+    if (badge) badge.classList.add('hidden')
+  }
 }
 
 function renderLogTab() {
@@ -1338,6 +1344,49 @@ function initResizeHandles() {
         localStorage.setItem('panelHeight:' + targetId, target.offsetHeight)
       } catch(e) {}
     })
+  })
+}
+
+
+// ── Price range bar ────────────────────────────────────────────────────────────
+function updateRangeBar() {
+  const low   = state.sessionLow  || state.dayLow
+  const high  = state.sessionHigh || state.dayHigh
+  const price = state.price
+  if (!low || !high || !price || high === low) return
+  const range    = high - low
+  const pricePct = Math.min(100, Math.max(0, (price - low) / range * 100))
+  const fill     = document.getElementById('range-fill')
+  const cursor   = document.getElementById('range-cursor')
+  const lowEl    = document.getElementById('range-low')
+  const highEl   = document.getElementById('range-high')
+  const pctEl    = document.getElementById('range-pct')
+  if (fill)   { fill.style.left = '0%'; fill.style.width = pricePct + '%' }
+  if (cursor) cursor.style.left = pricePct + '%'
+  const dSign = '$'
+  const fmt2 = v => dSign + v.toFixed(2)
+  if (lowEl)  lowEl.textContent  = 'L ' + fmt2(low)
+  if (highEl) highEl.textContent = 'H ' + fmt2(high)
+  if (pctEl)  {
+    const fromLow = ((price - low) / range * 100).toFixed(0)
+    pctEl.textContent = fromLow + '% from low'
+    pctEl.className   = 'range-pct ' + (pricePct > 50 ? 'green' : 'red')
+  }
+}
+
+// ── TRD-4: Subscribe to held positions for live price updates ─────────────────
+let _positionTickers = new Set()
+
+async function subscribePositionTickers() {
+  const result = await window.copilot.getPositions()
+  if (!result || !result.success) return
+  const positions = result.positions || []
+  positions.forEach(pos => {
+    const sym = pos.symbol
+    if (!_positionTickers.has(sym) && sym !== state.ticker) {
+      _positionTickers.add(sym)
+      window.copilot.subscribe(sym)
+    }
   })
 }
 

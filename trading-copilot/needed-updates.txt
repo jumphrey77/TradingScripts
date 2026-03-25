@@ -4,12 +4,18 @@ TRADING CO-PILOT
 TAPE SECTION
 ALERT SECTION
 SETTINGS
-
-1.  When I enter a Symbol and hit Enter, Go Into Research Mode
-
-FUTE: Watch LIst
-
+FUTURE: Watch LIst
 APP
+1. Going to the Log Tab removes the Log (20) showing 20 Alerts.  But next alert it show (20).
+2. Click the Trade Tab I see "Switch to In-Trade mode" 
+3. Alerts are showing time as 14:23:00 (prefer 2:23) .Drop the Seconds
+4. Tape displays the time in 14:24:00 (prefer 2:23) . Drop the Seconds
+5.  Review RSI now.
+
+
+
+
+
 1. Log Tab has a red pill displayed always - As soon as I look at the tab, assume its read, remove until new Alert
 2. When Docking Right or Left, limit the height near bottom so is doesnt cover the Windows TaskBar
 3. Id like to explore ToolTips on the alerts (configurable in Settings).  Each alert with display the Key Data in the alert when it fired Example:  VWAP Lost - Data in Tip message would have Price and VWAP and should have a Setiment (BUllish or Bearish, or Buy or Sell).  The descripption should be more verbose.  Sample template for Tool Tip. The Alert currently has a Dot next to the title.  If an alert is Bearish, make it red. Bullish, Green. If appropriate for the alerts
@@ -26,20 +32,14 @@ APP
 
 
 FUTURE:
-UI Major Change.  
-1. Ability to move sections Up / Down with ^v.  Example, TAPE is below ALerts. Click ^, it moves up.  Save this state. Only display ^v if I hover over lower Right corner.  Add a Setting Option (Allow Resposition Panels.  If checked, on mouse over lower right will appear.
-2. Ability to Resize some Sections (hight) (Alerts)(TAPE) 
 
-ALERTS
+
+ALERTS: 
 1. Make sure the News Alert doesnt hit the same news repeatedly (not sure if it is).  This morning it hit a few times (same news)
 
 
+SETTINGS:  
 
-SETTINGS.  
-1. On Open, Center dialog on Screen.  Currently if docked Right, window splits two screens.
-2. The Message Tab lower portion is cut off. No Scroll. Window too small
-3. Window shouldnt be able to be minimized.
-4. Add Allow Resposition Panels (see above)
 
 QUESTIONS:
 3. On Stocks that are less than $1.00 (maybe even $5), 
@@ -50,3 +50,19 @@ QUESTIONS:
 TAPE SECTION - 
 1.  We have an alert on Tape - bid / asks dominate.  Next to the word 
     TAPE, add a horiz bar of the last 10, (left most current) .Count show RRRRRRRGGG (but use colors) or a status of the battle.
+
+
+📊 DATA SNAPSHOT — RMSG at 03:07:31 PM ET
+
+PRICE: $0.608 | VWAP: $0.759 | Spread: $0.0005 (0.1%) ($0.0005 (0.1%)%)
+RSI: 27.8 (1m) / 55.2 (5m) / 45.3 (15m)
+MACD: -0.0451 | Signal histogram: -0.0116
+EMA20: $0.685 | EMA50: $0.725 | SMA20: $0.692
+BID: $0.608 | ASK: $0.609
+Volume: 0.2x avg | Avg Vol: — | Tape: Green
+Mode: Research | Strategy: Regular
+
+⚠️ Placeholders currently blank (need position):
+ENTRY: [ENTRY] | STOP: N/A | T1: N/A | T2: N/A | PnL: N/A
+
+What do you see here?

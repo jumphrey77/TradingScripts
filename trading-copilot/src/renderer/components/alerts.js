@@ -37,14 +37,52 @@ const AlertManager = (() => {
     const ticker = (typeof state !== 'undefined' && state.ticker) ? state.ticker : ''
     if (!ticker) return
 
+    // Build a frozen state snapshot using indicator values at FIRE TIME
+    // This ensures [RSI], [VWAP] etc in message templates show the values
+    // that actually triggered the alert, not the live values at send time
+    const frozenState = Object.assign({}, state)
+    if (data) {
+      // Map data field names to state field names used by placeholders
+      if (data.rsi      != null) frozenState.rsi      = data.rsi
+      if (data.vwap     != null) frozenState.vwap     = data.vwap
+      if (data.macd     != null) frozenState.macd     = data.macd
+      if (data.macdSignal != null) frozenState.macdSignal = data.macdSignal
+      if (data.volRatio != null) frozenState.volRatio = data.volRatio
+      if (data.bar?.close != null) frozenState.price  = data.bar.close
+      if (data.bar?.high  != null) frozenState.high   = data.bar.high
+      if (data.bar?.low   != null) frozenState.low    = data.bar.low
+      if (data.price      != null) frozenState.price  = data.price
+      if (data.bid        != null) frozenState.bid    = data.bid
+      if (data.ask        != null) frozenState.ask    = data.ask
+      if (data.spread     != null) frozenState.spread = data.spread
+      if (data.spreadPct  != null) frozenState.spreadPct = data.spreadPct
+    }
     const resolvedText = def.template
-      ? resolvePlaceholders(def.template, { ...state, ...data })
+      ? resolvePlaceholders(def.template, frozenState)
       : def.label
 
     // News alerts get special label with headline
     let label = def.label
     if (alertId === 'alert_news' && data && data.headline) {
       label = data.headline.slice(0, 60) + (data.headline.length > 60 ? '...' : '')
+    }
+
+    // Snapshot key indicator values at fire time for debugging
+    const snap = {}
+    if (data) {
+      if (data.rsi     != null) snap.rsi   = parseFloat(data.rsi).toFixed(1)
+      if (data.vwap    != null) snap.vwap  = parseFloat(data.vwap).toFixed(4)
+      if (data.macd    != null) snap.macd  = parseFloat(data.macd).toFixed(4)
+      if (data.price   != null) snap.price = parseFloat(data.price).toFixed(4)
+      if (data.volRatio!= null) snap.vol   = parseFloat(data.volRatio).toFixed(1) + 'x'
+      if (data.bar?.close != null) snap.price = parseFloat(data.bar.close).toFixed(4)
+    }
+    // Also grab from live state if data doesn't have it
+    if (typeof state !== 'undefined') {
+      if (!snap.rsi   && state.rsi   != null) snap.rsi   = parseFloat(state.rsi).toFixed(1)
+      if (!snap.vwap  && state.vwap  != null) snap.vwap  = parseFloat(state.vwap).toFixed(4)
+      if (!snap.price && state.price != null) snap.price = parseFloat(state.price).toFixed(4)
+      if (!snap.vol   && state.volRatio != null) snap.vol = parseFloat(state.volRatio).toFixed(1) + 'x'
     }
 
     const alert = {
@@ -57,6 +95,7 @@ const AlertManager = (() => {
       timestamp: timestamp || new Date().toISOString(),
       template:  def.template,
       ticker,
+      snap,
       url:       (alertId === 'alert_news' && data?.url) ? data.url : null
     }
 
@@ -126,6 +165,19 @@ const AlertManager = (() => {
         hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
       })
       const stale    = (now - new Date(alert.timestamp).getTime()) > STALE_MS
+
+      // Indicator snapshot for debugging
+      const s = alert.snap || {}
+      const snapParts = []
+      if (s.rsi)   snapParts.push('RSI ' + s.rsi)
+      if (s.price) snapParts.push('P $' + s.price)
+      if (s.vwap)  snapParts.push('VWAP $' + s.vwap)
+      if (s.vol)   snapParts.push('Vol ' + s.vol)
+      if (s.macd)  snapParts.push('MACD ' + s.macd)
+      const snapLine = snapParts.length
+        ? '<div class="alert-snap">' + snapParts.join(' &middot; ') + '</div>'
+        : ''
+
       const staleTag = stale ? ' alert-stale' : ''
       const viewBtn = alert.url
         ? '<button class="alert-view-btn" onclick="AlertManager.openUrl(this.dataset.url)" data-url="' + encodeURIComponent(alert.url || '') + '" title="View article">🔗</button>'
@@ -137,6 +189,7 @@ const AlertManager = (() => {
           <div class="alert-body">
             <div>${alert.label} <span style="font-size:10px;opacity:0.65;">${alert.ticker || ''}</span></div>
             <div class="alert-time">${time}${stale ? ' · stale' : ''}</div>
+            ${snapLine}
           </div>
           ${viewBtn}
           <button class="alert-send-btn" onclick="AlertManager.sendAlert('${alert.uid}')">Send ↗</button>

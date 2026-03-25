@@ -280,6 +280,15 @@
       "favorite": false,
       "buttonText": "",
       "buttonStyle": ""
+    },
+    {
+      "id": "msg_snapshot",
+      "label": "Data Snapshot \u2014 all indicators",
+      "category": "analysis",
+      "favorite": true,
+      "buttonText": "\ud83d\udcca Snapshot",
+      "buttonStyle": "blue",
+      "template": "\ud83d\udcca DATA SNAPSHOT \u2014 [T] at [TIME_ET]\n\nPRICE: [P] | VWAP: [VWAP] | Spread: [SPREAD]\nRSI: [RSI] (1m) / [RSI5] (5m) / [RSI15] (15m)\nMACD: [MACD] | Histogram: [MACDH]\nEMA20: [EMA20] | EMA50: [EMA50] | SMA20: [SMA20]\nBID: [BID] | ASK: [ASK]\nVolume: [VOLRAW] ([VOL]) | Tape: [TAPE]\nMode: [MODE] | Strategy: [STRAT]\n\nWhat do you see? Go / No-Go?"
     }
   ],
   "alerts": [

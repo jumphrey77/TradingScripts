@@ -53,7 +53,9 @@ function resolvePlaceholders(template, state) {
                    ? (state.macd >= 0 ? '+' : '') + fmtN(state.macd, 4)
                    : 'N/A',
     '[VWAP]':    fmt(state.vwap),
-    '[VOL]':     state.volRatio != null ? `${fmtN(state.volRatio)}x avg` : 'N/A',
+    '[VOL]':     state.volRatio != null ? fmtN(state.volRatio) + 'x avg' : 'N/A',
+    '[VOLRAW]':  state.volCurrent ? state.volCurrent.toLocaleString() + ' shares' : 'N/A',
+    '[VOLAVG]':  state.volAvg     ? state.volAvg.toLocaleString() + '/bar avg' : 'N/A',
     '[SPREAD]':  state.spread != null
                    ? `${fmt(state.spread, 4)} (${fmtN(state.spreadPct)}%)`
                    : 'N/A',

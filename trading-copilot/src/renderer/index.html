@@ -18,8 +18,6 @@
       </select>
       <select id="mode-select">
         <option value="off">Off</option>
-        <option value="research">Research</option>
-        <option value="intrade">In-Trade</option>
         <option value="exit">Exit Plan</option>
       </select>
       <button id="config-btn" class="icon-btn" title="Settings">⚙</button>
@@ -65,19 +63,15 @@
         </div>
       </div>
 
-      <!-- RSI 1m / 5m / 15m -->
-      <div class="grid3">
-        <div class="metric">
-          <div class="metric-label">RSI 1m</div>
-          <div id="rsi-val" class="metric-val">—</div>
-        </div>
-        <div class="metric">
-          <div class="metric-label">RSI 5m</div>
-          <div id="rsi5m-val" class="metric-val">—</div>
-        </div>
-        <div class="metric">
-          <div class="metric-label">RSI 15m</div>
-          <div id="rsi15m-val" class="metric-val">—</div>
+      <!-- RSI combined full-width -->
+      <div class="metric metric-full">
+        <div class="metric-label">RSI &nbsp;<span class="rsi-tf-label">1m</span> / <span class="rsi-tf-label">5m</span> / <span class="rsi-tf-label">15m</span></div>
+        <div class="rsi-combined">
+          <span id="rsi-val" class="metric-val">—</span>
+          <span class="rsi-sep">/</span>
+          <span id="rsi5m-val" class="metric-val">—</span>
+          <span class="rsi-sep">/</span>
+          <span id="rsi15m-val" class="metric-val">—</span>
         </div>
       </div>
 
@@ -118,6 +112,22 @@
         <div class="vol-foot">
           <span id="vol-current">Vol: —</span>
           <span id="vol-avg">Avg: —</span>
+        </div>
+      </div>
+
+      <!-- Price range bar (Today's Low - High) -->
+      <div class="range-wrap" id="range-wrap">
+        <div class="range-top">
+          <span class="metric-label">Today's Range</span>
+          <span id="range-pct" class="range-pct">—</span>
+        </div>
+        <div class="range-track">
+          <div id="range-fill" class="range-fill" style="left:0%;width:0%"></div>
+          <div id="range-cursor" class="range-cursor" style="left:50%"></div>
+        </div>
+        <div class="range-foot">
+          <span id="range-low" class="range-low">L —</span>
+          <span id="range-high" class="range-high">H —</span>
         </div>
       </div>
 

@@ -21,7 +21,7 @@ class AlpacaService extends EventEmitter {
     this.bars15m     = []          // rolling 15m bars for RSI 15m
     this.tradeCtx    = {}          // entry, stop, targets from UI
     this.alertCooldowns = {}       // prevent alert spam
-    this.vwapAccum   = { pv: 0, vol: 0 } // price*volume and volume for VWAP
+    this.vwap        = null              // session VWAP from Alpaca dailyBar.vw
     this._init()
   }
 
@@ -90,16 +90,22 @@ class AlpacaService extends EventEmitter {
     this.bars        = []
     this.bars5m      = []
     this.bars15m     = []
-    this.vwapAccum   = { pv: 0, vol: 0 }
-    this._sessionHOD = 0
-    this._prevRSI    = null
-    this._prevMACD   = null
-    this._prevSignal = null
+
+    this._sessionHOD  = 0
+    this._sessionHigh = null
+    this._sessionLow  = null
+    this._sessionOpen = null
+    this.vwap         = null
+    this._prevRSI     = null
+    this._prevMACD    = null
+    this._prevSignal  = null
     this._subscribeSocket(this.ticker)
     // Pre-load historical bars so RSI/MACD are ready immediately
     this._loadHistoricalBars(this.ticker)
     // Refresh 5m/15m bars every minute (not streamed on free tier)
     this._start5m15mRefresh(this.ticker)
+    // Refresh VWAP from dailyBar every 60s
+    this._startVwapRefresh(this.ticker)
     // Poll news every 60 seconds
     this._startNewsPolling(this.ticker)
     // WebSocket handles live quotes - see _connect()
@@ -146,6 +152,36 @@ class AlpacaService extends EventEmitter {
     this._newsTimer = setInterval(poll, 60000) // then every 60s
   }
 
+  // ── VWAP refresh every 60s from dailyBar ────────────────────────────────
+  _startVwapRefresh(ticker) {
+    if (this._vwapTimer) clearInterval(this._vwapTimer)
+    const poll = async () => {
+      if (this.ticker !== ticker) return
+      try {
+        const dataUrl = this.config.alpacaDataUrl || 'https://data.alpaca.markets'
+        const headers = {
+          'APCA-API-KEY-ID':     this.config.alpacaKey,
+          'APCA-API-SECRET-KEY': this.config.alpacaSecret
+        }
+        const resp = await fetch(
+          `${dataUrl}/v2/stocks/${ticker}/snapshot?feed=${this._feed()}`,
+          { headers }
+        )
+        const snap = await resp.json()
+        const db   = snap.dailyBar || snap.snapshot?.dailyBar || {}
+        const vw   = db.vw || db.VWAP || db.vwap || null
+        if (vw && vw !== this.vwap) {
+          this.vwap = vw
+          // Also update session H/L/O
+          if (db.h && db.h > (this._sessionHigh || 0)) this._sessionHigh = db.h
+          if (db.l && (!this._sessionLow || db.l < this._sessionLow)) this._sessionLow = db.l
+          if (db.o && !this._sessionOpen) this._sessionOpen = db.o
+        }
+      } catch(e) {}
+    }
+    this._vwapTimer = setInterval(poll, 60000)
+  }
+
   _start5m15mRefresh(ticker) {
     if (this._mtfTimer) clearInterval(this._mtfTimer)
     // Refresh 5m and 15m bars every 60 seconds
@@ -158,7 +194,7 @@ class AlpacaService extends EventEmitter {
           'APCA-API-SECRET-KEY': this.config.alpacaSecret
         }
         const [r5, r15] = await Promise.all([
-          fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=5Min&limit=50&feed=${this._feed()}`, { headers }),
+          fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=5Min&limit=100&feed=${this._feed()}`, { headers }),
           fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=15Min&limit=50&feed=${this._feed()}`, { headers })
         ])
         const d5  = await r5.json()
@@ -228,9 +264,9 @@ class AlpacaService extends EventEmitter {
 
       // ── 2. Historical bars — 1m, 5m, 15m in parallel ────────────────────
       const [barsResp, bars5mResp, bars15mResp] = await Promise.all([
-        fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=1Min&limit=50&feed=${this._feed()}`,  { headers }),
-        fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=5Min&limit=50&feed=${this._feed()}`,  { headers }),
-        fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=15Min&limit=50&feed=${this._feed()}`, { headers })
+        fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=1Min&limit=400&feed=${this._feed()}`,  { headers }),
+        fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=5Min&limit=100&feed=${this._feed()}`,  { headers }),
+        fetch(`${dataUrl}/v2/stocks/${ticker}/bars?timeframe=15Min&limit=50&feed=${this._feed()}`,  { headers })
       ])
       const barsData   = await barsResp.json()
       const bars5mData = await bars5mResp.json()
@@ -277,23 +313,23 @@ class AlpacaService extends EventEmitter {
       this.bars = bars
       const lastBar   = bars[bars.length - 1]
       // Use Alpaca's daily VWAP if available, else calculate from bars
-      const alpacaVwap = snap.dailyBar?.vw || snap.dailyBar?.vwap || null
-      if (alpacaVwap) {
-        // Use Alpaca's official VWAP directly
-        this.vwapAccum = { pv: 0, vol: 0, override: alpacaVwap }
-      } else {
-        this.vwapAccum = { pv: 0, vol: 0 }
-        bars.forEach(b => {
-          const typical = (b.high + b.low + b.close) / 3
-          this.vwapAccum.pv  += typical * b.volume
-          this.vwapAccum.vol += b.volume
-        })
-      }
+      const db = snap.dailyBar || {}
+      // Log daily bar fields once to diagnose VWAP field name
+      console.log(`[${ticker}] DailyBar: o=${db.o||db.OpenPrice} h=${db.h||db.HighPrice} l=${db.l||db.LowPrice} c=${db.c||db.ClosePrice} vw=${db.vw||db.VWAP} v=${db.v||db.Volume}`)
+      const alpacaVwap = db.vw || db.VWAP || db.vwap || null
+      // Session high/low from daily bar — NOT from 1m bars (accurate full-session range)
+      const sessionHigh = db.h  || db.HighPrice  || db.high  || null
+      const sessionLow  = db.l  || db.LowPrice   || db.low   || null
+      const sessionOpen = db.o  || db.OpenPrice  || db.open  || null
+      // Seed running session trackers
+      if (sessionHigh) this._sessionHigh = sessionHigh
+      if (sessionLow)  this._sessionLow  = sessionLow
+      if (sessionOpen) this._sessionOpen = sessionOpen
+        // VWAP: always use Alpaca's official session VWAP from dailyBar.vw
+      // We never calculate it ourselves — Alpaca has all trades since open
+      this.vwap = alpacaVwap || null
 
-      const vwap = alpacaVwap
-        || (this.vwapAccum.vol > 0
-          ? parseFloat((this.vwapAccum.pv / this.vwapAccum.vol).toFixed(4))
-          : lastBar.close)
+      const vwap = this.vwap || alpacaVwap || lastBar.close
 
       // Normalize 5m and 15m bars
       const normalize = (raw) => raw.map(b => ({
@@ -328,6 +364,10 @@ class AlpacaService extends EventEmitter {
         vwap,
         volAvg:   this._calcAvgVolume(),
         volRatio: this._calcVolRatio(),
+        // Use daily bar for session H/L/O (accurate), fallback to bar range
+        sessionHigh: sessionHigh || Math.max(...bars.map(x => x.high)),
+        sessionLow:  sessionLow  || Math.min(...bars.map(x => x.low)),
+        sessionOpen: sessionOpen || bars[0]?.open || null,
         high:     Math.max(...bars.map(x => x.high)),
         low:      Math.min(...bars.map(x => x.low)),
         bars:     bars.slice(-15)
@@ -364,6 +404,7 @@ class AlpacaService extends EventEmitter {
     if (this._pollTimer)  { clearInterval(this._pollTimer);  this._pollTimer  = null }
     if (this._mtfTimer)   { clearInterval(this._mtfTimer);   this._mtfTimer   = null }
     if (this._newsTimer)  { clearInterval(this._newsTimer);  this._newsTimer  = null }
+    if (this._vwapTimer)  { clearInterval(this._vwapTimer);  this._vwapTimer  = null }
     if (!this.socket) return
     try {
       this.socket.unsubscribeFromQuotes([ticker])
@@ -420,21 +461,15 @@ class AlpacaService extends EventEmitter {
 
     // Rolling 50 bars max
     this.bars.push(b)
-    if (this.bars.length > 50) this.bars.shift()
+    if (this.bars.length > 400) this.bars.shift()
 
-    // Update VWAP accumulator
-    // Use bar's own vwap if Alpaca provides it, else accumulate
-    let vwap
-    if (b.vwap) {
-      vwap = b.vwap  // Alpaca provides intraday VWAP on each bar
-    } else {
-      const typical = (b.high + b.low + b.close) / 3
-      this.vwapAccum.pv  += typical * b.volume
-      this.vwapAccum.vol += b.volume
-      vwap = this.vwapAccum.vol > 0
-        ? parseFloat((this.vwapAccum.pv / this.vwapAccum.vol).toFixed(4))
-        : b.close
-    }
+    // Update running session High/Low
+    if (!this._sessionHigh || b.high > this._sessionHigh) this._sessionHigh = b.high
+    if (!this._sessionLow  || b.low  < this._sessionLow)  this._sessionLow  = b.low
+    if (!this._sessionOpen) this._sessionOpen = b.open
+
+    // VWAP: use cached value from dailyBar.vw (refreshed every 60s via _startVwapRefresh)
+    const vwap = this.vwap || b.close
 
     // Calculate indicators
     const macdFull = this._calcMACDFull()
@@ -453,6 +488,10 @@ class AlpacaService extends EventEmitter {
       vwap,
       volAvg:     this._calcAvgVolume(),
       volRatio:   this._calcVolRatio(),
+      // Session H/L tracks running max/min across all bars seen today
+      sessionHigh: this._sessionHigh || Math.max(...this.bars.map(x => x.high)),
+      sessionLow:  this._sessionLow  || Math.min(...this.bars.map(x => x.low)),
+      sessionOpen: this._sessionOpen || this.bars[0]?.open || null,
       high:       Math.max(...this.bars.map(x => x.high)),
       low:        Math.min(...this.bars.map(x => x.low)),
       bars:       this.bars.slice(-15)
@@ -471,18 +510,28 @@ class AlpacaService extends EventEmitter {
   _calcRSIFromBars(bars, period = 14) {
     if (!bars || bars.length < period + 1) return null
     const closes = bars.map(b => b.close)
-    let gains = 0, losses = 0
 
-    for (let i = closes.length - period; i < closes.length; i++) {
+    // Wilder's smoothed RSI — matches TradingView / RH / standard platforms
+    // Step 1: seed with simple average of first 'period' changes
+    let avgGain = 0, avgLoss = 0
+    for (let i = 1; i <= period; i++) {
       const diff = closes[i] - closes[i - 1]
-      if (diff >= 0) gains  += diff
-      else           losses -= diff
+      if (diff >= 0) avgGain += diff
+      else           avgLoss -= diff
+    }
+    avgGain /= period
+    avgLoss /= period
+
+    // Step 2: apply Wilder's smoothing through all remaining bars
+    for (let i = period + 1; i < closes.length; i++) {
+      const diff = closes[i] - closes[i - 1]
+      const gain = diff >= 0 ? diff : 0
+      const loss = diff <  0 ? -diff : 0
+      avgGain = (avgGain * (period - 1) + gain) / period
+      avgLoss = (avgLoss * (period - 1) + loss) / period
     }
 
-    const avgGain = gains  / period
-    const avgLoss = losses / period
     if (avgLoss === 0) return 100
-
     const rs = avgGain / avgLoss
     return parseFloat((100 - 100 / (1 + rs)).toFixed(1))
   }
@@ -588,16 +637,36 @@ class AlpacaService extends EventEmitter {
     const bars = this.bars
     const bt   = ind.bar?.time  // bar event time — use for all alert timestamps
 
+    // Require minimum bars before any crossover alerts fire
+    // Prevents false triggers on session startup with insufficient data
+    const MIN_BARS = 20
+    if (bars.length < MIN_BARS) return
+
     // ── RSI alerts ──────────────────────────────────────────────────────────
     if (rsi !== null && bars.length >= 2) {
-      const prevRSI = this._prevRSI ?? rsi
-      if (prevRSI <= 70 && rsi > 70)  this._fireAlert('alert_001',      ind, bt)
-      if (prevRSI >= 70 && rsi < 70)  this._fireAlert('alert_001b',     ind, bt)
-      if (prevRSI >= 30 && rsi < 30)  this._fireAlert('alert_002',      ind, bt)
-      if (prevRSI <= 30 && rsi > 30)  this._fireAlert('alert_002b',     ind, bt)
-      if (prevRSI <= 50 && rsi > 50)  this._fireAlert('alert_rsi50_up', ind, bt)
-      if (prevRSI >= 50 && rsi < 50)  this._fireAlert('alert_rsi50_dn', ind, bt)
-      this._prevRSI = rsi
+      // If _prevRSI is null (first bar after subscribe), seed it and skip
+      // to prevent false crossover on first data point
+      if (this._prevRSI === null) {
+        this._prevRSI = rsi
+      } else {
+        const prevRSI = this._prevRSI
+
+        // Sanity check — RSI should not jump more than 30 points in one bar
+        // If it does, the calc is unreliable (too few bars, bad data) — skip
+        const rsiJump = Math.abs(rsi - prevRSI)
+        if (rsiJump > 30) {
+          console.warn('[' + (ind.ticker||'?') + '] RSI jump ' + prevRSI.toFixed(1) + '->' + rsi.toFixed(1) + ' (' + rsiJump.toFixed(1) + ' pts) — skipping alert, updating prev')
+          this._prevRSI = rsi
+        } else {
+          if (prevRSI <= 70 && rsi > 70)  this._fireAlert('alert_001',      ind, bt)
+          if (prevRSI >= 70 && rsi < 70)  this._fireAlert('alert_001b',     ind, bt)
+          if (prevRSI >= 30 && rsi < 30)  this._fireAlert('alert_002',      ind, bt)
+          if (prevRSI <= 30 && rsi > 30)  this._fireAlert('alert_002b',     ind, bt)
+          if (prevRSI <= 50 && rsi > 50)  this._fireAlert('alert_rsi50_up', ind, bt)
+          if (prevRSI >= 50 && rsi < 50)  this._fireAlert('alert_rsi50_dn', ind, bt)
+          this._prevRSI = rsi
+        }
+      }
     }
 
     // ── Volume alerts ────────────────────────────────────────────────────────
@@ -605,7 +674,8 @@ class AlpacaService extends EventEmitter {
     else if (volRatio > 2.0) this._fireAlert('alert_003', ind, bt)
 
     // ── VWAP cross — candle CLOSE must cross (BUG-1 FIX) ─────────────────
-    if (bars.length >= 2 && vwap) {
+    if (bars.length >= 3 && vwap) {
+      // Require at least 3 bars before firing VWAP alerts (avoid first-bar false triggers)
       const prevClose = bars[bars.length - 2].close
       const currClose = bars[bars.length - 1].close
       if (prevClose < vwap && currClose > vwap) this._fireAlert('alert_013', ind, bt)
@@ -614,14 +684,20 @@ class AlpacaService extends EventEmitter {
 
     // ── MACD crossover ────────────────────────────────────────────────────
     if (macd !== null && macdSignal !== null) {
-      const prevMACD   = this._prevMACD   ?? macd
-      const prevSignal = this._prevSignal ?? macdSignal
-      if (prevMACD <= prevSignal && macd > macdSignal)
-        this._fireAlert('alert_011', { ...ind, crossType: 'bullish' }, bt)
-      if (prevMACD >= prevSignal && macd < macdSignal)
-        this._fireAlert('alert_012', { ...ind, crossType: 'bearish' }, bt)
-      this._prevMACD   = macd
-      this._prevSignal = macdSignal
+      if (this._prevMACD === null || this._prevSignal === null) {
+        // Seed on first bar, don't fire false cross
+        this._prevMACD   = macd
+        this._prevSignal = macdSignal
+      } else {
+        const prevMACD   = this._prevMACD
+        const prevSignal = this._prevSignal
+        if (prevMACD <= prevSignal && macd > macdSignal)
+          this._fireAlert('alert_011', { ...ind, crossType: 'bullish' }, bt)
+        if (prevMACD >= prevSignal && macd < macdSignal)
+          this._fireAlert('alert_012', { ...ind, crossType: 'bearish' }, bt)
+        this._prevMACD   = macd
+        this._prevSignal = macdSignal
+      }
     }
 
     // ── HOD Breakout ──────────────────────────────────────────────────────
