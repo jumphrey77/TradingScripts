@@ -1650,3 +1650,265 @@ body, button, input, .project-card-name, .logo-text,
   line-height: 1.4;
   white-space: nowrap;
 }
+
+/* ─── Dashboard drop zones ────────────────────────────────────────────────── */
+
+.drop-zone-target {
+  border: 2px dashed var(--border-bright);
+  border-radius: var(--radius-md);
+  padding: 12px 10px;
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: default;
+  transition: all 160ms ease;
+  background: var(--bg-base);
+  min-height: 72px;
+  justify-content: center;
+}
+
+.drop-zone-target:hover {
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.drop-zone-target.drag-over {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--accent-glow);
+  box-shadow: 0 0 20px var(--accent-glow);
+  transform: scale(1.01);
+}
+
+.drop-zone-target.drop-success {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  border-style: solid;
+}
+
+.drop-zone-target.drop-error {
+  border-color: var(--danger);
+  background: var(--danger-dim);
+  animation: shake 400ms ease;
+}
+
+.drop-zone-target.drop-processing {
+  border-color: var(--warning);
+  border-style: solid;
+}
+
+.drop-zone-icon {
+  font-size: 22px;
+  opacity: 0.5;
+  transition: opacity var(--transition);
+}
+
+.drop-zone-target:hover .drop-zone-icon,
+.drop-zone-target.drag-over .drop-zone-icon {
+  opacity: 1;
+}
+
+.drop-zone-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  letter-spacing: 0.06em;
+}
+
+.drop-zone-path {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  text-align: center;
+}
+
+.drop-zone-disabled {
+  margin-top: 8px;
+  padding: 0 4px;
+}
+
+/* ─── Card actions row ────────────────────────────────────────────────────── */
+
+.card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.btn-toggle-drop {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  font-size: 10px;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  flex: 1;
+}
+
+.btn-toggle-drop.active {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.btn-toggle-drop:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ─── Dashboard nav item ──────────────────────────────────────────────────── */
+
+.nav-dashboard {
+  border-top: 1px solid var(--border);
+  margin-bottom: 4px;
+  padding-top: 10px !important;
+  color: var(--text-secondary);
+}
+
+.nav-dashboard.active {
+  border-left-color: var(--accent);
+  background: var(--bg-active);
+}
+
+/* ─── Compact mode button in sidebar ─────────────────────────────────────── */
+
+#btnCompact {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+#btnCompact:hover { color: var(--accent); }
+
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20%      { transform: translateX(-5px); }
+  40%      { transform: translateX(5px); }
+  60%      { transform: translateX(-4px); }
+  80%      { transform: translateX(4px); }
+}
+
+/* ─── New 2-column project detail layout ─────────────────────────────────── */
+
+.detail-grid-v2 {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 16px;
+  align-items: start;
+  min-height: 0;
+}
+
+.detail-col-left {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.detail-col-right {
+  display: flex;
+  flex-direction: column;
+  /* Stretch to fill the view height */
+  height: calc(100vh - 140px);
+  min-height: 400px;
+}
+
+.detail-card-full-height {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.detail-card-full-height .detail-card-body {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ─── File map with 3 columns ─────────────────────────────────────────────── */
+
+.map-entries-tall {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  max-height: none !important;
+}
+
+.map-header-row {
+  display: flex;
+  gap: 8px;
+  padding: 5px 8px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.map-header-row > div {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.map-entry {
+  display: flex !important;
+  gap: 8px;
+  align-items: center;
+}
+
+.map-col-name  { width: 140px; flex-shrink: 0; }
+.map-col-dest  { flex: 1; min-width: 0; }
+.map-col-size  { width: 56px; flex-shrink: 0; text-align: right;
+                 font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); }
+
+/* ─── Fix #4/#8: Title descender clipping (g, p, y in Syne) ─────────────── */
+
+.page-header h1,
+.project-card-name,
+.logo-text,
+.detail-card-title,
+.run-summary-title,
+.modal-header h2,
+.setup-card h2 {
+  line-height: 1.5 !important;
+  padding-bottom: 2px;
+  overflow: visible !important;
+}
+
+/* ─── Fix #1: File map column widths ─────────────────────────────────────── */
+
+.map-col-name { width: 160px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-col-dest { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-col-size { width: 68px; flex-shrink: 0; text-align: right; }
+
+/* ─── Fix #3: Info table cell wrapping ───────────────────────────────────── */
+
+.info-table td:last-child {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* ─── Fix #5: 50/50 detail layout override ───────────────────────────────── */
+
+.detail-grid-v2 {
+  grid-template-columns: 1fr 1fr !important;
+}
+
+.detail-col-right {
+  height: calc(100vh - 120px) !important;
+}
+
+/* ─── Run history table — no truncation ──────────────────────────────────── */
+
+.run-log-table td { white-space: nowrap; }
+.run-log-table td:nth-child(2) { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }

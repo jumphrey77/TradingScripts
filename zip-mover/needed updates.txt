@@ -1,0 +1,1 @@
+1.  Compact View  - Still has corners overshadowing (poking out of) rounded corners

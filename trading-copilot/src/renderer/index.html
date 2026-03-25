@@ -9,7 +9,7 @@
 <body>
   <div id="app">
 
-    <!-- ── Top control bar ─────────────────────────────────────── -->
+    <!-- ── Always-visible top bar ──────────────────────────────── -->
     <div class="control-bar">
       <input id="ticker-input" class="ticker-in" placeholder="TICKER" maxlength="6"/>
       <select id="strategy-select">
@@ -25,7 +25,14 @@
       <button id="config-btn" class="icon-btn" title="Settings">⚙</button>
     </div>
 
-
+    <!-- ── Tab bar ─────────────────────────────────────────────── -->
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="research" onclick="switchTab('research')">Research</button>
+      <button class="tab-btn"        data-tab="trade"    onclick="switchTab('trade')">Trade</button>
+      <button class="tab-btn"        data-tab="log"      onclick="switchTab('log')">
+        Log <span id="alert-badge" class="alert-badge hidden">0</span>
+      </button>
+    </div>
 
     <!-- ── Off state ───────────────────────────────────────────── -->
     <div id="off-state" class="off-state">
@@ -33,17 +40,19 @@
       <p class="hint">Select a mode to begin monitoring</p>
     </div>
 
-    <!-- ── Main panel ──────────────────────────────────────────── -->
-    <div id="main-panel" class="hidden">
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!-- TAB 1: RESEARCH                                           -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <div id="tab-research" class="tab-content">
 
-      <!-- Price -->
+      <!-- Price row -->
       <div class="price-row">
         <span id="price-display" class="price-big">—</span>
-        <span id="change-display" class="price-change">—</span>
+        <span id="change-display" class="price-change"></span>
         <span id="clock" class="clock">—</span>
       </div>
 
-      <!-- Scalp spread callout (scalp mode only) -->
+      <!-- Scalp spread callout -->
       <div id="scalp-callout" class="scalp-callout hidden">
         <div>
           <div class="sc-label">Spread</div>
@@ -56,7 +65,7 @@
         </div>
       </div>
 
-      <!-- RSI multi-timeframe row -->
+      <!-- RSI 1m / 5m / 15m -->
       <div class="grid3">
         <div class="metric">
           <div class="metric-label">RSI 1m</div>
@@ -72,7 +81,7 @@
         </div>
       </div>
 
-      <!-- MACD and VWAP row -->
+      <!-- MACD + VWAP -->
       <div class="grid2">
         <div class="metric">
           <div class="metric-label">MACD</div>
@@ -84,7 +93,7 @@
         </div>
       </div>
 
-      <!-- Bid/Ask and spread -->
+      <!-- Bid/Ask + Spread -->
       <div class="grid2">
         <div class="metric">
           <div class="metric-label">Bid / Ask</div>
@@ -121,18 +130,60 @@
 
       <hr class="divider"/>
 
-      <!-- Make a Trade (intrade mode) -->
+      <!-- Alerts (current ticker) -->
+      <div class="section-header-row">
+        <span class="section-label">alerts</span>
+        <div id="send-all-row" class="hidden">
+          <button onclick="sendAllAlerts()" class="btn-send-all-sm">Send All ↗</button>
+        </div>
+      </div>
+      <div id="alerts-container">
+        <div class="no-alerts">No alerts — monitoring active</div>
+      </div>
+
+      <hr class="divider"/>
+
+      <!-- Tape -->
+      <div class="section-label">tape</div>
+      <div id="tape-container" class="tape-wrap">
+        <div class="no-tape">Waiting for data...</div>
+      </div>
+
+      <hr class="divider"/>
+
+      <!-- Send to Claude -->
+      <div class="section-label">send to claude</div>
+      <div class="msg-selector">
+        <select id="message-select" class="msg-dropdown">
+          <option value="">Select message...</option>
+        </select>
+        <div id="msg-preview" class="msg-preview hidden">—</div>
+        <div class="msg-btn-row">
+          <button id="send-claude-btn" class="btn btn-claude" disabled>Send ↗</button>
+        </div>
+      </div>
+
+      <!-- Favorite buttons -->
+      <hr class="divider"/>
+      <div class="section-label">quick send</div>
+      <div id="favorites-container" class="favorites-container"></div>
+
+    </div><!-- /#tab-research -->
+
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!-- TAB 2: TRADE                                              -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <div id="tab-trade" class="tab-content hidden">
+
+      <!-- Make a Trade form (intrade/exit mode only) -->
       <div id="intrade-levels" class="hidden">
         <div class="section-label">make a trade</div>
         <div class="trade-form">
-
-          <!-- Row 1: Price, Qty, Order Type -->
           <div class="trade-form-row">
             <div class="trade-field">
               <div class="trade-field-label">Price $</div>
               <input id="order-price" class="trade-input" type="number"
-                step="0.001" placeholder="0.000"
-                oninput="onOrderPriceChange()"/>
+                step="0.001" placeholder="0.000" oninput="onOrderPriceChange()"/>
             </div>
             <div class="trade-field">
               <div class="trade-field-label">Qty</div>
@@ -150,7 +201,6 @@
             </div>
           </div>
 
-          <!-- Row 2: Preset selector -->
           <div class="trade-form-row" style="align-items:center;gap:8px;">
             <div class="trade-field-label" style="white-space:nowrap;">Preset</div>
             <select id="preset-select" class="trade-select" style="flex:1;"
@@ -159,7 +209,6 @@
             </select>
           </div>
 
-          <!-- Calculated levels (read only) -->
           <div class="calc-levels" id="calc-levels">
             <div class="calc-row">
               <span class="calc-lbl">Stop Loss</span>
@@ -183,23 +232,22 @@
             </div>
           </div>
 
-          <!-- Order status -->
           <div id="order-status" class="order-status-line">—</div>
-
-          <!-- BUY button only -->
-          <button id="buy-btn" class="btn-buy-full" onclick="submitOrder('buy')">
-            BUY
-          </button>
-
+          <button id="buy-btn" class="btn-buy-full" onclick="submitOrder('buy')">BUY</button>
         </div>
-
-
       </div>
 
-      <!-- Positions panel -->
-      <div id="positions-panel" class="hidden">
-        <hr class="divider"/>
-        <div class="section-label">positions
+      <!-- Research mode placeholder in Trade tab -->
+      <div id="trade-no-position" class="hidden">
+        <div class="off-state" style="padding:2rem 0;">
+          <p>Switch to In-Trade mode</p>
+          <p class="hint">to place and manage orders</p>
+        </div>
+      </div>
+
+      <!-- Positions -->
+      <div id="positions-panel">
+        <div class="section-label" style="margin-top:8px;">positions
           <span id="positions-refresh" class="refresh-dot" title="Auto-refreshing"></span>
         </div>
         <div id="positions-container">
@@ -207,8 +255,8 @@
         </div>
       </div>
 
-      <!-- Orders panel -->
-      <div id="orders-panel" class="hidden">
+      <!-- Orders -->
+      <div id="orders-panel">
         <hr class="divider"/>
         <div class="section-label">orders (today)</div>
         <div id="orders-container">
@@ -216,8 +264,9 @@
         </div>
       </div>
 
-      <!-- Exit plan (exit mode) -->
+      <!-- Exit plan -->
       <div id="exit-levels" class="hidden">
+        <hr class="divider"/>
         <div class="section-label">exit plan</div>
         <div class="levels-block">
           <div class="level-row">
@@ -239,51 +288,40 @@
         </div>
       </div>
 
-      <hr class="divider"/>
+    </div><!-- /#tab-trade -->
 
-      <!-- Alerts -->
-      <div class="section-label">alerts</div>
-      <div id="alerts-container">
-        <div class="no-alerts">No alerts — monitoring active</div>
-      </div>
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <!-- TAB 3: LOG                                                -->
+    <!-- ══════════════════════════════════════════════════════════ -->
+    <div id="tab-log" class="tab-content hidden">
 
-      <hr class="divider"/>
-
-      <!-- Tape feed -->
-      <div class="section-label">tape</div>
-      <div id="tape-container" class="tape-wrap">
-        <div class="no-tape">Waiting for data...</div>
-      </div>
-
-      <hr class="divider"/>
-
-      <!-- Message selector -->
-      <div class="section-label">send to claude</div>
-      <div class="msg-selector">
-        <select id="message-select" class="msg-dropdown">
-          <option value="">Select message...</option>
+      <!-- Filter bar -->
+      <div class="log-filter-bar">
+        <select id="log-filter-ticker" class="trade-select" onchange="renderLogTab()"
+          style="flex:1;">
+          <option value="">All tickers</option>
         </select>
-        <div id="msg-preview" class="msg-preview hidden">—</div>
-        <div class="msg-btn-row">
-          <button id="send-claude-btn" class="btn btn-claude" disabled>Send ↗</button>
-        </div>
-      </div>
-
-      <!-- Send All Alerts -->
-      <div id="send-all-row" class="send-all-row hidden">
-        <button onclick="sendAllAlerts()" class="btn btn-send-all">
-          Send All Alerts ↗
+        <select id="log-filter-severity" class="trade-select" onchange="renderLogTab()"
+          style="width:90px;">
+          <option value="">All</option>
+          <option value="danger">Danger</option>
+          <option value="warning">Warning</option>
+          <option value="info">Info</option>
+        </select>
+        <button class="small-btn" onclick="AlertManager.clearAll();renderLogTab()"
+          style="color:var(--red);border-color:var(--red-b);white-space:nowrap;">
+          Clear All
         </button>
       </div>
 
-      <!-- Favorite message buttons (dynamic from JSON) -->
-      <hr class="divider"/>
-      <div class="section-label">quick send</div>
-      <div id="favorites-container" class="favorites-container"></div>
+      <!-- Log content -->
+      <div id="log-container">
+        <div class="no-data">No alerts in log</div>
+      </div>
 
-    </div><!-- /#main-panel -->
+    </div><!-- /#tab-log -->
 
-    <!-- ── Status bar ───────────────────────────────────────────── -->
+    <!-- ── Always-visible status bar ───────────────────────────── -->
     <div class="status-bar">
       <span>
         <span id="status-dot" class="status-dot disconnected"></span>

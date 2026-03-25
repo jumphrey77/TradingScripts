@@ -144,12 +144,14 @@ class ZipProcessor {
     const results = [];
     const entries = await fs.readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
+      // Skip shell brace-expansion artifacts e.g. {main,renderer,shared}
+      if (entry.name.startsWith('{') && entry.name.endsWith('}')) continue;
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         const sub = await this._collectFiles(fullPath);
         results.push(...sub);
       } else {
-        results.push({ filename: entry.name, fullPath });
+        results.push({ filename: entry.name, fullPath, size: (await fs.stat(fullPath)).size });
       }
     }
     return results;

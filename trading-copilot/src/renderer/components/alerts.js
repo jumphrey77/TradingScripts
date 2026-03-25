@@ -194,6 +194,33 @@ const AlertManager = (() => {
     }
   }
 
+  // Return full cache for log tab
+  function getCache() { return alertCache }
+
+  // Send alert by uid (used from log tab)
+  function sendAlertByUid(uid) {
+    for (const ticker in alertCache) {
+      const alert = alertCache[ticker].find(a => a.uid === uid)
+      if (alert && alert.template) {
+        const resolved = resolvePlaceholders(alert.template, state)
+        navigator.clipboard.writeText(resolved).then(() => {
+          showToast('Alert copied - Ctrl+V into Claude chat')
+        })
+        return
+      }
+    }
+  }
+
+  // Remove alert globally (from log tab)
+  function removeAlertGlobal(uid) {
+    for (const ticker in alertCache) {
+      alertCache[ticker] = alertCache[ticker].filter(a => a.uid !== uid)
+    }
+    save()
+    render()
+  }
+
   init()
-  return { add, sendAlert, removeAlert, clearTicker, clearAll, setTicker, render, openUrl }
+  return { add, sendAlert, sendAlertByUid, removeAlert, removeAlertGlobal,
+           clearTicker, clearAll, setTicker, render, openUrl, getCache }
 })()

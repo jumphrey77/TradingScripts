@@ -19,16 +19,20 @@ class ProjectManager {
 
   async init() {
     const appRoot = this.config.getAppRoot();
+    console.log('[ProjectManager] init — appRoot:', appRoot);
     await fs.ensureDir(appRoot);
     const entries = await fs.readdir(appRoot, { withFileTypes: true });
+    console.log('[ProjectManager] entries in appRoot:', entries.map(e => e.name));
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const projectDir = path.join(appRoot, entry.name);
       const mapPath = path.join(projectDir, 'project_map.json');
       if (await fs.pathExists(mapPath)) {
         await this._loadProject(entry.name);
+        console.log('[ProjectManager] loaded project:', entry.name);
       }
     }
+    console.log('[ProjectManager] total projects loaded:', Object.keys(this.projects).length);
   }
 
   async _loadProject(name) {
@@ -44,6 +48,7 @@ class ProjectManager {
         nextRunNumber: map.nextRunNumber || 1,
         fileCount: Object.keys(map.files || {}).length,
         excludedFolders: map.excludedFolders || [],
+        allowDropToUI: map.allowDropToUI !== false,  // default true
         lastRun: await this._getLastRun(name)
       };
     } catch (err) {
@@ -141,6 +146,7 @@ class ProjectManager {
       nextRunNumber: 1,
       fileCount: Object.keys(map.files).length,
       excludedFolders: map.excludedFolders,
+      allowDropToUI: true,
       lastRun: null
     };
 
@@ -168,6 +174,22 @@ class ProjectManager {
     this.projects[name].fileCount = Object.keys(map.files).length;
     this.projects[name].excludedFolders = map.excludedFolders;
     return map;
+  }
+
+  // ── Update per-project settings (allowDropToUI etc.) ─────────────────────
+  async updateProjectSettings(name, settings) {
+    const map = this.maps[name];
+    const project = this.projects[name];
+    if (!map) throw new Error(`Project "${name}" not found`);
+    // Merge allowed settings keys
+    const allowed = ['allowDropToUI'];
+    for (const key of allowed) {
+      if (settings[key] !== undefined) {
+        map[key] = settings[key];
+        project[key] = settings[key];
+      }
+    }
+    await this.saveMap(name);
   }
 
   // ── Update exclusions and rebuild ─────────────────────────────────────────
@@ -237,6 +259,16 @@ class ProjectManager {
     map.fileCount = Object.keys(map.files).length;
     const projectDir = this._projectDir(projectName);
     await fs.writeJson(path.join(projectDir, 'project_map.json'), map, { spaces: 2 });
+  }
+
+  async resetRunNumber(projectName) {
+    const map = this.maps[projectName];
+    const project = this.projects[projectName];
+    if (!map) return;
+    map.nextRunNumber = 1;
+    if (project) project.nextRunNumber = 1;
+    if (project) project.lastRun = null;
+    await this.saveMap(projectName);
   }
 
   resolveDestination(projectName, tokenizedPath) {

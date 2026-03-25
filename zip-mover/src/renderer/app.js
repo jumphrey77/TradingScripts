@@ -91,6 +91,13 @@ function showView(viewId) {
 // ─── Render Sidebar ───────────────────────────────────────────────────────────
 
 function renderSidebar() {
+  const isDashboard = !state.currentProject && $('viewDashboard').classList.contains('active');
+  const dashItem = `
+    <div class="project-nav-item nav-dashboard ${isDashboard ? 'active' : ''}" id="navDashboard">
+      <span style="font-size:14px">⊞</span>
+      <span class="project-nav-name">Dashboard</span>
+    </div>
+  `;
   const items = state.projects.map(p => {
     const status = state.watcherStatus[p.name];
     const isActive = status && status.active;
@@ -103,13 +110,18 @@ function renderSidebar() {
     `;
   }).join('');
 
-  // Keep the label
   const labelHtml = `<div class="project-list-label">PROJECTS</div>`;
-  els.projectList.innerHTML = labelHtml + (items || '<div style="padding:8px 16px;font-size:11px;color:var(--text-muted)">No projects yet</div>');
+  els.projectList.innerHTML = dashItem + labelHtml + (items || '<div style="padding:8px 16px;font-size:11px;color:var(--text-muted)">No projects yet</div>');
 
-  // Bind clicks
-  els.projectList.querySelectorAll('.project-nav-item').forEach(el => {
+  // Bind project clicks
+  els.projectList.querySelectorAll('.project-nav-item:not(.nav-dashboard)').forEach(el => {
     el.addEventListener('click', () => openProject(el.dataset.project));
+  });
+  const navDash = $('navDashboard');
+  if (navDash) navDash.addEventListener('click', () => {
+    state.currentProject = null;
+    renderSidebar();
+    showView('viewDashboard');
   });
 }
 
@@ -163,19 +175,30 @@ function renderDashboard() {
             <div class="stat-label">Last Run</div>
           </div>
         </div>
-        <div class="project-card-drop-path">
-          <span class="project-card-drop-label">DROP HERE</span>
-          <span class="project-card-drop-value">${escapeHtml(p.projectDir || '—')}</span>
+        ${p.allowDropToUI !== false ? `
+        <div class="drop-zone-target" data-project="${escapeHtml(p.name)}" id="dropzone-${escapeHtml(p.name)}">
+          <div class="drop-zone-icon">📦</div>
+          <div class="drop-zone-label">Drop ZIP or file here</div>
+          <div class="drop-zone-path">${escapeHtml(p.projectDir || '')}</div>
+        </div>` : `
+        <div class="drop-zone-disabled">
+          <div class="drop-zone-path" style="padding:8px 0">${escapeHtml(p.projectDir || '')}</div>
+        </div>`}
+        <div class="card-actions">
+          <button class="btn-open-folder" data-open-project="${escapeHtml(p.name)}">📂 Open</button>
+          <button class="btn-toggle-drop ${p.allowDropToUI !== false ? 'active' : ''}" data-project="${escapeHtml(p.name)}" title="Toggle drag-and-drop for this project">
+            ${p.allowDropToUI !== false ? '⬇ Drop ON' : '⬇ Drop OFF'}
+          </button>
         </div>
-        <button class="btn-open-folder" data-open-project="${escapeHtml(p.name)}">📂 Open Folder</button>
       </div>
     `;
   }).join('');
 
   els.projectCards.querySelectorAll('.project-card').forEach(el => {
     el.addEventListener('click', (e) => {
-      // Don't open project detail when clicking the Open Folder button
       if (e.target.closest('.btn-open-folder')) return;
+      if (e.target.closest('.btn-toggle-drop')) return;
+      if (e.target.closest('.drop-zone-target')) return;
       openProject(el.dataset.project);
     });
   });
@@ -185,6 +208,27 @@ function renderDashboard() {
       e.stopPropagation();
       zm.openProjectFolder(el.dataset.openProject);
     });
+  });
+
+  // Toggle Allow Drop to UI
+  els.projectCards.querySelectorAll('.btn-toggle-drop').forEach(el => {
+    el.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const name = el.dataset.project;
+      const project = state.projects.find(p => p.name === name);
+      const newVal = !(project && project.allowDropToUI !== false);
+      await zm.updateProjectSettings(name, { allowDropToUI: newVal });
+      const s = await zm.getState();
+      applyState(s);
+    });
+  });
+
+  // Bind drag-and-drop to project drop zones
+  els.projectCards.querySelectorAll('.drop-zone-target').forEach(el => {
+    const projectName = el.dataset.project;
+    el.addEventListener('dragover',  e => { e.preventDefault(); e.stopPropagation(); el.classList.add('drag-over'); e.dataTransfer.dropEffect = 'copy'; });
+    el.addEventListener('dragleave', e => { if (!el.contains(e.relatedTarget)) el.classList.remove('drag-over'); });
+    el.addEventListener('drop',      e => handleDashboardDrop(e, el, projectName));
   });
 
   // Show last run summary if available
@@ -302,6 +346,18 @@ function showAttentionAlert(title, message, items) {
   els.alertBanner.className = '';  // Remove color class, attention-banner handles its own style
 }
 
+function filterMapEntries(query) {
+  const q = (query || '').toLowerCase().trim();
+  const container = $('mapEntries');
+  if (!container) return;
+  container.querySelectorAll('.map-entry').forEach(el => {
+    if (!q) { el.style.display = ''; return; }
+    const name = (el.dataset.filename || '').toLowerCase();
+    const dest = (el.dataset.dest || '').toLowerCase();
+    el.style.display = (name.includes(q) || dest.includes(q)) ? '' : 'none';
+  });
+}
+
 // ─── Project Detail ───────────────────────────────────────────────────────────
 
 async function openProject(name) {
@@ -330,7 +386,7 @@ function renderProjectDetail(details) {
   const collisions = map.collisions || [];
   const fileEntries = Object.entries(files);
 
-  // Info table
+  // ── PROJECT INFO (compact) ─────────────────────────────────────────────────
   const excludedFolders = map.excludedFolders || [];
   const excludedDisplay = excludedFolders.length > 0
     ? excludedFolders.map(f => `<span class="exclusion-tag">${escapeHtml(f)}</span>`).join(' ')
@@ -339,14 +395,12 @@ function renderProjectDetail(details) {
   const infoHtml = `
     <div class="detail-card">
       <div class="detail-card-header"><div class="detail-card-title">PROJECT INFO</div></div>
-      <div class="detail-card-body">
+      <div class="detail-card-body" style="padding:10px 16px">
         <table class="info-table">
-          <tr><td>Destination</td><td>${escapeHtml(map.destinationRoot || '—')}</td></tr>
-          <tr><td>Mapped Files</td><td>${fileEntries.length}</td></tr>
+          <tr><td>Destination</td><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px" title="${escapeHtml(map.destinationRoot || '')}">${escapeHtml(map.destinationRoot || '—')}</td></tr>
           <tr><td>Map Built</td><td>${formatDate(map.builtAt)}</td></tr>
           <tr><td>Watcher</td><td>${status.active ? '<span style="color:var(--accent)">● Active</span>' : '<span style="color:var(--text-muted)">○ Inactive</span>'}</td></tr>
           <tr><td>Next Run #</td><td>${map.nextRunNumber || 1}</td></tr>
-          <tr><td>Retention</td><td>${state.config.backupRetentionRuns || 10} runs</td></tr>
           <tr>
             <td>Excluded</td>
             <td>
@@ -361,64 +415,29 @@ function renderProjectDetail(details) {
     </div>
   `;
 
-  // Collision alert
-  let collisionHtml = '';
-  if (collisions.length > 0) {
-    const itemsHtml = collisions.map(c => `<li>${escapeHtml(c)}</li>`).join('');
-    collisionHtml = `
-      <div class="attention-banner" style="margin-bottom:16px">
-        <div class="attention-icon">🚨</div>
-        <div class="attention-body">
-          <h3>⚠ FILENAME COLLISIONS IN MAP</h3>
-          <p>These filenames exist in multiple locations. Only the last scanned path is mapped. Resolve by updating the map entries manually:</p>
-          <ul>${itemsHtml}</ul>
-        </div>
-      </div>
-    `;
-  }
-
-  // Map viewer
-  const mapHtml = `
-    <div class="detail-card">
-      <div class="detail-card-header">
-        <div class="detail-card-title">FILE MAP (${fileEntries.length})</div>
-        <button class="btn-secondary" style="font-size:11px;padding:4px 10px" id="btnRebuildMapDetail">↻ Rebuild</button>
-      </div>
-      <div class="detail-card-body">
-        <input type="text" class="map-search" id="mapSearch" placeholder="Filter by filename…" />
-        <div class="map-entries" id="mapEntries">
-          ${fileEntries.map(([filename, dest]) => `
-            <div class="map-entry" data-filename="${escapeHtml(filename)}" data-dest="${escapeHtml(dest)}">
-              <div class="map-entry-name">${escapeHtml(filename)}</div>
-              ${collisions.includes(filename) ? '<span class="map-collision-tag">COLLISION</span>' : ''}
-              <div class="map-entry-dest">${escapeHtml(dest)}</div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    </div>
-  `;
-
-  // Run log
+  // ── RUN HISTORY ────────────────────────────────────────────────────────────
   const runLogHtml = `
     <div class="detail-card">
       <div class="detail-card-header">
         <div class="detail-card-title">RUN HISTORY</div>
-        ${runLog.length > 0 ? '<button class="btn-secondary" style="font-size:11px;padding:4px 10px" id="btnViewLog">&#x1F4CB; View Log File</button>' : ''}
+        <div style="display:flex;gap:6px">
+          ${runLog.length > 0 ? '<button class="btn-secondary" style="font-size:11px;padding:4px 10px" id="btnViewLog">📋 View Log</button>' : ''}
+          ${runLog.length > 0 ? '<button class="btn-danger-sm" style="font-size:11px;padding:4px 10px" id="btnClearLog">🗑 Clear</button>' : ''}
+        </div>
       </div>
-      <div class="detail-card-body" style="max-height:360px;overflow-y:auto">
+      <div class="detail-card-body" style="padding:0">
         ${runLog.length === 0
-          ? '<div style="color:var(--text-muted);font-size:12px">No runs yet. Drop a zip into this project folder.</div>'
-          : `<table class="run-log-table">
+          ? '<div style="color:var(--text-muted);font-size:12px;padding:12px 16px">No runs yet. Drop a zip into this project folder.</div>'
+          : `<table class="run-log-table" style="width:100%">
               <thead><tr><th>Run</th><th>Zip</th><th>Status</th><th>Files</th><th>Time</th></tr></thead>
               <tbody>
                 ${runLog.map(r => `
                   <tr>
                     <td>#${r.runNumber}</td>
-                    <td title="${escapeHtml(r.zipName)}">${escapeHtml(r.zipName.length > 22 ? r.zipName.substring(0,22)+'…' : r.zipName)}</td>
+                    <td title="${escapeHtml(r.zipName)}">${escapeHtml(r.zipName.length > 18 ? r.zipName.substring(0,18)+'…' : r.zipName)}</td>
                     <td><span class="run-status-pill ${r.status}">${r.status.replace(/_/g,' ')}</span></td>
-                    <td>${r.filesDeployed.length}↑ ${r.filesUnmatched.length ? r.filesUnmatched.length+'?' : ''} ${r.errors.length ? r.errors.length+'✗' : ''}</td>
-                    <td>${formatDate(r.finishedAt)}</td>
+                    <td>${r.filesDeployed.length}↑${r.filesUnmatched.length ? ' '+r.filesUnmatched.length+'?' : ''}${r.errors.length ? ' '+r.errors.length+'✗' : ''}</td>
+                    <td style="white-space:nowrap">${formatDate(r.finishedAt)}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -428,59 +447,127 @@ function renderProjectDetail(details) {
     </div>
   `;
 
-  // Unmatched files (from NewFilesDetected)
-  // We'll show a placeholder for now — in a real run these come from run results
+  // ── UNMATCHED FILES ────────────────────────────────────────────────────────
   const unmatchedHtml = `
     <div class="detail-card">
       <div class="detail-card-header"><div class="detail-card-title">UNMATCHED FILES</div></div>
       <div class="detail-card-body">
-        <div id="unmatchedFiles">
-          <div style="color:var(--text-muted);font-size:12px;line-height:1.6">
-            Files that had no map entry are placed in <code style="color:var(--accent);background:var(--bg-base);padding:1px 5px;border-radius:3px">NewFilesDetected/</code>.
-            After a run, unmatched files will appear here for you to assign destinations.
-          </div>
+        <div style="color:var(--text-muted);font-size:12px;line-height:1.6">
+          Files with no map entry go to
+          <code style="color:var(--accent);background:var(--bg-base);padding:1px 5px;border-radius:3px">NewFilesDetected/</code>.
+          Click a map entry to assign its destination.
         </div>
       </div>
     </div>
   `;
 
-  els.projectDetailContent.innerHTML = `
-    ${collisionHtml}
-    <div class="detail-grid">
-      ${infoHtml}
-      ${mapHtml}
-    </div>
-    <div class="detail-grid" style="margin-top:16px">
-      ${runLogHtml}
-      ${unmatchedHtml}
+  // ── FILE MAP (with size column, fills full height) ─────────────────────────
+  const mapHtml = `
+    <div class="detail-card detail-card-full-height">
+      <div class="detail-card-header">
+        <div class="detail-card-title">FILE MAP (${fileEntries.length})</div>
+        <button class="btn-secondary" style="font-size:11px;padding:4px 10px" id="btnRebuildMapDetail">↻ Rebuild</button>
+      </div>
+      <div class="detail-card-body" style="padding:10px 12px;display:flex;flex-direction:column;flex:1;min-height:0">
+        <input type="text" class="map-search" id="mapSearch" placeholder="Filter by filename…" />
+        <div class="map-entries map-entries-tall" id="mapEntries">
+          <div class="map-header-row">
+            <div class="map-col-name">File Name</div>
+            <div class="map-col-dest">Path</div>
+            <div class="map-col-size">Size</div>
+          </div>
+          <div id="mapEntriesLoading" style="color:var(--text-muted);font-size:11px;padding:8px 4px">Loading sizes…</div>
+        </div>
+      </div>
     </div>
   `;
 
-  // Edit exclusions button
+  // ── COLLISION ALERT ────────────────────────────────────────────────────────
+  let collisionHtml = '';
+  if (collisions.length > 0) {
+    const itemsHtml = collisions.map(c => `<li>${escapeHtml(c)}</li>`).join('');
+    collisionHtml = `
+      <div class="attention-banner" style="margin-bottom:16px">
+        <div class="attention-icon">🚨</div>
+        <div class="attention-body">
+          <h3>⚠ FILENAME COLLISIONS IN MAP</h3>
+          <p>These filenames exist in multiple locations. Only the last scanned path is mapped:</p>
+          <ul>${itemsHtml}</ul>
+        </div>
+      </div>
+    `;
+  }
+
+  // ── NEW LAYOUT: 2 columns — Col1 (3 stacked cards) | Col2 (tall file map) ──
+  els.projectDetailContent.innerHTML = `
+    ${collisionHtml}
+    <div class="detail-grid-v2" style="grid-template-columns:1fr 1fr">
+      <div class="detail-col-left">
+        ${infoHtml}
+        ${runLogHtml}
+        ${unmatchedHtml}
+      </div>
+      <div class="detail-col-right">
+        ${mapHtml}
+      </div>
+    </div>
+  `;
+
+  // ── Bind buttons ──────────────────────────────────────────────────────────
   $('btnEditExclusions').addEventListener('click', () => openExclusionsModal(details.name));
-
-  // Map search filter
-  $('mapSearch').addEventListener('input', e => {
-    const q = e.target.value.toLowerCase();
-    $('mapEntries').querySelectorAll('.map-entry').forEach(el => {
-      const match = el.dataset.filename.toLowerCase().includes(q) || el.dataset.dest.toLowerCase().includes(q);
-      el.style.display = match ? '' : 'none';
-    });
-  });
-
-  // Map entry click → edit
-  $('mapEntries').querySelectorAll('.map-entry').forEach(el => {
-    el.addEventListener('click', () => openMapEntryEditor(details.name, el.dataset.filename, el.dataset.dest));
-  });
-
-  // Rebuild map button in detail
   $('btnRebuildMapDetail').addEventListener('click', () => rebuildMap(details.name));
 
-  // View log button (only rendered when runs exist)
   const btnViewLog = $('btnViewLog');
-  if (btnViewLog) {
-    btnViewLog.addEventListener('click', () => zm.openRunLog(details.name));
+  if (btnViewLog) btnViewLog.addEventListener('click', () => zm.openRunLog(details.name));
+
+  const btnClearLog = $('btnClearLog');
+  if (btnClearLog) {
+    btnClearLog.addEventListener('click', async () => {
+      if (!confirm(`Clear all run history for "${details.name}"? This cannot be undone.`)) return;
+      const res = await zm.clearRunLog(details.name);
+      if (res.success) openProject(details.name);
+      else alert('Failed: ' + res.error);
+    });
   }
+
+  // ── Map search filter — works on live DOM including async-loaded entries ──
+  $('mapSearch').addEventListener('input', e => {
+    filterMapEntries(e.target.value);
+  });
+
+  // ── Load file sizes async then render map entries ─────────────────────────
+  zm.getMapWithSizes(details.name).then(res => {
+    const mapContainer = $('mapEntries');
+    if (!mapContainer) return;
+    const filesWithSizes = res.success ? (res.map.filesWithSizes || {}) : {};
+
+    const entriesHtml = fileEntries.map(([filename, dest]) => {
+      const info = filesWithSizes[filename] || {};
+      const size = info.size != null
+        ? (info.size < 1024 ? info.size+'B' : info.size < 1048576 ? (info.size/1024).toFixed(1)+'KB' : (info.size/1048576).toFixed(2)+'MB')
+        : '—';
+      return `
+        <div class="map-entry" data-filename="${escapeHtml(filename)}" data-dest="${escapeHtml(dest)}">
+          <div class="map-col-name map-entry-name">${escapeHtml(filename)}${collisions.includes(filename) ? ' <span class="map-collision-tag">!</span>' : ''}</div>
+          <div class="map-col-dest map-entry-dest">${escapeHtml(dest)}</div>
+          <div class="map-col-size">${size}</div>
+        </div>
+      `;
+    }).join('');
+
+    // Replace loading indicator, keep header
+    const loading = $('mapEntriesLoading');
+    if (loading) loading.remove();
+    mapContainer.insertAdjacentHTML('beforeend', entriesHtml);
+
+    // Rebind click handlers
+    mapContainer.querySelectorAll('.map-entry').forEach(el => {
+      el.addEventListener('click', () => openMapEntryEditor(details.name, el.dataset.filename, el.dataset.dest));
+    });
+    // Re-apply any active filter after async load
+    const searchEl = $('mapSearch');
+    if (searchEl && searchEl.value) filterMapEntries(searchEl.value);
+  });
 }
 
 // ─── Map Entry Editor ─────────────────────────────────────────────────────────
@@ -885,6 +972,10 @@ function applyState(newState) {
   state.projects = newState.projects || [];
   state.config = newState.config || {};
   state.watcherStatus = newState.watcherStatus || {};
+  if (newState.appVersion) {
+    const vEl = document.querySelector('.version-tag');
+    if (vEl) vEl.textContent = 'v' + newState.appVersion;
+  }
   renderSidebar();
   renderDashboard();
 }
@@ -971,7 +1062,68 @@ function resolveProcessingAlert(projectName, result) {
   });
 }
 
+// ─── Dashboard Drop Handler ───────────────────────────────────────────────────
+
+async function handleDashboardDrop(e, el, projectName) {
+  e.preventDefault();
+  e.stopPropagation();
+  el.classList.remove('drag-over');
+
+  const files = Array.from(e.dataTransfer.files);
+  if (files.length === 0) return;
+
+  for (const file of files) {
+    el.classList.add('drop-processing');
+    showAlert('alert-info', `📦 Processing — ${projectName}`, `Deploying <strong>${escapeHtml(file.name)}</strong>…`, false);
+
+    const res = await zm.handleDrop(projectName, file.path);
+    el.classList.remove('drop-processing');
+
+    if (!res.success) {
+      el.classList.add('drop-error'); setTimeout(() => el.classList.remove('drop-error'), 1500);
+      showAlert('alert-danger', 'Drop Failed', escapeHtml(res.error), true);
+      return;
+    }
+
+    if (res.action === 'conflict') {
+      showConflictDialog(res.filename, res.filePath, res.conflicts);
+      return;
+    }
+
+    el.classList.add('drop-success'); setTimeout(() => el.classList.remove('drop-success'), 1800);
+    const result = res.result;
+    resolveProcessingAlert(projectName, result);
+    state.lastRunResult = { projectName, result };
+    const newState = await zm.getState();
+    applyState(newState);
+    renderRunSummary(projectName, result);
+  }
+}
+
+function showConflictDialog(filename, filePath, projectNames) {
+  const choice = projectNames.length > 0
+    ? window.prompt(`"${filename}" matches multiple projects:\n${projectNames.join(', ')}\n\nType the exact project name to deploy to:`)
+    : null;
+  if (!choice) return;
+  const matched = projectNames.find(n => n.toLowerCase() === choice.toLowerCase());
+  if (!matched) { alert('No matching project found.'); return; }
+  zm.resolveConflict(matched, filename, filePath).then(async res => {
+    if (res.success) {
+      const newState = await zm.getState();
+      applyState(newState);
+      renderRunSummary(matched, res.result);
+    }
+  });
+}
+
 // ─── Event Bindings ───────────────────────────────────────────────────────────
+
+// Safe element binder — logs warning instead of crashing on missing elements
+function on(id, event, handler) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(event, handler);
+  else console.warn('[ZipMover] Missing DOM element:', id);
+}
 
 function bindEvents() {
   // Setup screen
@@ -983,7 +1135,7 @@ function bindEvents() {
   $('btnConfirmSetup').addEventListener('click', confirmSetup);
 
   // Open ZipMover root folder from dashboard header
-  $('btnOpenRootFolder').addEventListener('click', () => zm.openRootFolder());
+  on('btnOpenRootFolder', 'click', () => zm.openRootFolder());
 
   // New project wizard
   $('btnNewProject').addEventListener('click', openNewProjectModal);
@@ -1071,6 +1223,8 @@ function bindEvents() {
   });
 
   // Settings
+  on('btnCompact', 'click', () => zm.openCompact());
+
   $('btnSettings').addEventListener('click', () => {
     renderSettings();
     showView('viewSettings');
@@ -1078,16 +1232,10 @@ function bindEvents() {
 
   // ── IPC event listeners ──
 
-  zm.onNeedsSetup(() => {
-    hideLoading();
-    showSetupScreen();
-  });
-
   zm.onStateUpdate(newState => {
+    // Only apply passive state updates (watcher status changes etc.)
+    // onRunComplete handles its own full refresh — don't double-apply
     applyState(newState);
-    if (state.currentProject) {
-      openProject(state.currentProject);
-    }
   });
 
   zm.onWatcherEvent(evt => {
@@ -1106,27 +1254,31 @@ function bindEvents() {
   zm.onRunComplete(({ projectName, result }) => {
     state.lastRunResult = { projectName, result };
 
-    zm.getState().then(newState => {
-      applyState(newState);
+    // Small delay to let sendStateUpdate from main arrive first,
+    // then fetch fresh state for accurate lastRun/fileCount
+    setTimeout(() => {
+      zm.getState().then(newState => {
+        applyState(newState);
 
-      showView('viewDashboard');
-      state.currentProject = null;
-      renderSidebar();
-      renderDashboard();
+        // Navigate to dashboard and show summary
+        state.currentProject = null;
+        showView('viewDashboard');
+        renderSidebar();
+        renderDashboard();
 
-      // Replace the "Processing…" alert with a completion alert (dismissible)
-      resolveProcessingAlert(projectName, result);
+        // Resolve "Processing…" → completion banner
+        resolveProcessingAlert(projectName, result);
+        renderRunSummary(projectName, result);
 
-      renderRunSummary(projectName, result);
-
-      if (result.collisionAlerts && result.collisionAlerts.length > 0) {
-        showAttentionAlert(
-          '⚠ FILENAME COLLISION DETECTED',
-          'The following filenames exist in multiple destination paths. Only one was used. Review and fix the map:',
-          result.collisionAlerts
-        );
-      }
-    });
+        if (result.collisionAlerts && result.collisionAlerts.length > 0) {
+          showAttentionAlert(
+            '⚠ FILENAME COLLISION DETECTED',
+            'The following filenames exist in multiple destination paths. Only one was used. Review and fix the map:',
+            result.collisionAlerts
+          );
+        }
+      });
+    }, 150);
   });
 
   zm.onAppError(message => {
@@ -1155,6 +1307,12 @@ async function init() {
 
   try {
     const initialState = await zm.getState();
+    console.log('[Renderer] get-state returned:', JSON.stringify({
+      projectCount: initialState.projects ? initialState.projects.length : 'undefined',
+      needsSetup: initialState.needsSetup,
+      hasConfig: !!initialState.config,
+      appVersion: initialState.appVersion
+    }));
     if (initialState.needsSetup) {
       hideLoading();
       showSetupScreen();

@@ -2,96 +2,50 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('zipmover', {
-  // ── Setup ─────────────────────────────────────────────────────────────────
-  browseZipMoverRoot: () =>
-    ipcRenderer.invoke('browse-zipmover-root'),
-
-  setAppRoot: (folderPath) =>
-    ipcRenderer.invoke('set-app-root', { folderPath }),
-
-  changeAppRoot: (folderPath) =>
-    ipcRenderer.invoke('change-app-root', { folderPath }),
-
-  // ── Shell / folder access ─────────────────────────────────────────────────
-  openProjectFolder: (name) =>
-    ipcRenderer.invoke('open-project-folder', { name }),
-
-  openRootFolder: () =>
-    ipcRenderer.invoke('open-root-folder'),
-
-  openRunLog: (name) =>
-    ipcRenderer.invoke('open-run-log', { name }),
-
-  // ── Project management ────────────────────────────────────────────────────
-  createProject: (name, destinationRoot, excludedFolders) =>
-    ipcRenderer.invoke('create-project', { name, destinationRoot, excludedFolders }),
-
-  deleteProject: (name) =>
-    ipcRenderer.invoke('delete-project', { name }),
-
-  rebuildMap: (name, excludedFolders) =>
-    ipcRenderer.invoke('rebuild-map', { name, excludedFolders }),
-
-  scanRootFolders: (destinationRoot) =>
-    ipcRenderer.invoke('scan-root-folders', { destinationRoot }),
-
-  parseGitignore: (destinationRoot) =>
-    ipcRenderer.invoke('parse-gitignore', { destinationRoot }),
-
-  updateExclusions: (name, excludedFolders) =>
-    ipcRenderer.invoke('update-exclusions', { name, excludedFolders }),
-
-  getProjectDetails: (name) =>
-    ipcRenderer.invoke('get-project-details', { name }),
-
-  getProjectMap: (name) =>
-    ipcRenderer.invoke('get-project-map', { name }),
-
-  updateMapEntry: (projectName, filename, destination) =>
-    ipcRenderer.invoke('update-map-entry', { projectName, filename, destination }),
-
-  // ── Watcher ───────────────────────────────────────────────────────────────
-  toggleWatcher: (name, active) =>
-    ipcRenderer.invoke('toggle-watcher', { name, active }),
-
-  // ── File system dialogs ───────────────────────────────────────────────────
-  browseFolder: () =>
-    ipcRenderer.invoke('browse-folder'),
-
-  // ── Config ────────────────────────────────────────────────────────────────
-  updateConfig: (updates) =>
-    ipcRenderer.invoke('update-config', updates),
-
   // ── State ─────────────────────────────────────────────────────────────────
-  getState: () =>
-    ipcRenderer.invoke('get-state'),
+  getState: () => ipcRenderer.invoke('get-state'),
 
-  processZip: (projectName, zipPath) =>
-    ipcRenderer.invoke('process-zip', { projectName, zipPath }),
+  // ── Setup ─────────────────────────────────────────────────────────────────
+  browseZipMoverRoot: () => ipcRenderer.invoke('browse-zipmover-root'),
+  setAppRoot:   (fp) => ipcRenderer.invoke('set-app-root',    { folderPath: fp }),
+  changeAppRoot:(fp) => ipcRenderer.invoke('change-app-root', { folderPath: fp }),
 
-  // ── Event listeners ───────────────────────────────────────────────────────
-  onNeedsSetup: (callback) => {
-    ipcRenderer.on('needs-setup', (event, data) => callback(data));
-    return () => ipcRenderer.removeAllListeners('needs-setup');
-  },
+  // ── Compact window ────────────────────────────────────────────────────────
+  openCompact:    ()  => ipcRenderer.invoke('open-compact'),
+  closeCompact:   ()  => ipcRenderer.invoke('close-compact'),
+  compactResize:  (h) => ipcRenderer.invoke('compact-resize', { height: h }),
 
-  onStateUpdate: (callback) => {
-    ipcRenderer.on('state-update', (event, data) => callback(data));
-    return () => ipcRenderer.removeAllListeners('state-update');
-  },
+  // ── File drop ─────────────────────────────────────────────────────────────
+  handleDrop:      (projectName, filePath) => ipcRenderer.invoke('handle-drop',      { projectName, filePath }),
+  resolveConflict: (projectName, filename, filePath) => ipcRenderer.invoke('resolve-conflict', { projectName, filename, filePath }),
 
-  onWatcherEvent: (callback) => {
-    ipcRenderer.on('watcher-event', (event, data) => callback(data));
-    return () => ipcRenderer.removeAllListeners('watcher-event');
-  },
+  // ── Shell ─────────────────────────────────────────────────────────────────
+  openProjectFolder: (name) => ipcRenderer.invoke('open-project-folder', { name }),
+  openRootFolder:    ()     => ipcRenderer.invoke('open-root-folder'),
+  openRunLog:        (name) => ipcRenderer.invoke('open-run-log',      { name }),
+  clearRunLog:       (name) => ipcRenderer.invoke('clear-run-log',     { name }),
+  getMapWithSizes:   (name) => ipcRenderer.invoke('get-map-with-sizes', { name }),
 
-  onRunComplete: (callback) => {
-    ipcRenderer.on('run-complete', (event, data) => callback(data));
-    return () => ipcRenderer.removeAllListeners('run-complete');
-  },
+  // ── Projects ──────────────────────────────────────────────────────────────
+  createProject:   (name, destinationRoot, excludedFolders) => ipcRenderer.invoke('create-project', { name, destinationRoot, excludedFolders }),
+  deleteProject:   (name)                => ipcRenderer.invoke('delete-project',         { name }),
+  rebuildMap:      (name, excludedFolders) => ipcRenderer.invoke('rebuild-map',           { name, excludedFolders }),
+  scanRootFolders: (dest)                => ipcRenderer.invoke('scan-root-folders',       { destinationRoot: dest }),
+  parseGitignore:  (dest)                => ipcRenderer.invoke('parse-gitignore',         { destinationRoot: dest }),
+  updateExclusions:(name, ef)            => ipcRenderer.invoke('update-exclusions',       { name, excludedFolders: ef }),
+  getProjectDetails:(name)               => ipcRenderer.invoke('get-project-details',     { name }),
+  getProjectMap:   (name)                => ipcRenderer.invoke('get-project-map',         { name }),
+  updateMapEntry:  (pn, fn, dest)        => ipcRenderer.invoke('update-map-entry',        { projectName: pn, filename: fn, destination: dest }),
+  updateProjectSettings: (name, settings) => ipcRenderer.invoke('update-project-settings', { name, settings }),
+  toggleWatcher:   (name, active)        => ipcRenderer.invoke('toggle-watcher',          { name, active }),
+  browseFolder:    ()                    => ipcRenderer.invoke('browse-folder'),
+  updateConfig:    (updates)             => ipcRenderer.invoke('update-config',            updates),
+  processZip:      (pn, zp)             => ipcRenderer.invoke('process-zip',              { projectName: pn, zipPath: zp }),
 
-  onAppError: (callback) => {
-    ipcRenderer.on('app-error', (event, message) => callback(message));
-    return () => ipcRenderer.removeAllListeners('app-error');
-  }
+  // ── Events ────────────────────────────────────────────────────────────────
+  onStateUpdate:  (cb) => { ipcRenderer.on('state-update',  (e, d) => cb(d)); return () => ipcRenderer.removeAllListeners('state-update');  },
+  onWatcherEvent: (cb) => { ipcRenderer.on('watcher-event', (e, d) => cb(d)); return () => ipcRenderer.removeAllListeners('watcher-event'); },
+  onRunComplete:  (cb) => { ipcRenderer.on('run-complete',  (e, d) => cb(d)); return () => ipcRenderer.removeAllListeners('run-complete');  },
+  onAppError:     (cb) => { ipcRenderer.on('app-error',     (e, m) => cb(m)); return () => ipcRenderer.removeAllListeners('app-error');     },
+  onCompactEvent: (cb) => { ipcRenderer.on('compact-event', (e, d) => cb(d)); return () => ipcRenderer.removeAllListeners('compact-event'); }
 });

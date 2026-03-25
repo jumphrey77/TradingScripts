@@ -51,6 +51,12 @@ const $ = id => document.getElementById(id)
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 async function init() {
+  // Restore last active tab
+  try {
+    const savedTab = localStorage.getItem('activeTab') || 'research'
+    switchTab(savedTab)
+  } catch(e) { switchTab('research') }
+
   // Load autoCopyOnSelect from config
   if (window.copilot && window.copilot.getConfig) {
     const cfg = await window.copilot.getConfig()
@@ -96,6 +102,7 @@ function bindControls() {
       state.vwap   = null
       // Switch alert cache to new ticker
       if (typeof AlertManager !== 'undefined') AlertManager.setTicker(ticker)
+      updateAlertBadge()
       const tape = $('tape-container')
       if (tape) tape.innerHTML = '<div class="no-tape">Waiting for data...</div>'
       // Reset display
@@ -181,30 +188,34 @@ function updateModeUI() {
 
   if (mode === 'off') {
     show('off-state')
-    hide('main-panel')
+    // Hide all tab content areas when off
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'))
     return
   }
+  hide('off-state')
+  // Show current active tab
+  const activeTab = localStorage.getItem('activeTab') || 'research'
+  const activeEl = document.getElementById('tab-' + activeTab)
+  if (activeEl) activeEl.classList.remove('hidden')
 
   hide('off-state')
-  show('main-panel')
+  // With tabbed UI, main-panel is no longer a single div — tabs handle visibility
 
-  // Trade form + positions/orders
+  // Trade form visibility based on mode
+  const tradeNoPos = $('trade-no-position')
   if (mode === 'intrade') {
     show('intrade-levels')
     hide('exit-levels')
-    show('positions-panel')
-    show('orders-panel')
+    if (tradeNoPos) tradeNoPos.classList.add('hidden')
     startPositionsPolling()
   } else if (mode === 'exit') {
     hide('intrade-levels')
     show('exit-levels')
-    show('positions-panel')
-    show('orders-panel')
+    if (tradeNoPos) tradeNoPos.classList.add('hidden')
   } else {
     hide('intrade-levels')
     hide('exit-levels')
-    hide('positions-panel')
-    hide('orders-panel')
+    if (tradeNoPos) tradeNoPos.classList.remove('hidden')
   }
 
   // Scalp-specific UI
@@ -298,6 +309,7 @@ function setupAlpacaListeners() {
 
   window.copilot.onAlert(data => {
     AlertManager.add(data)
+    updateAlertBadge()
   })
 }
 
@@ -1097,6 +1109,106 @@ async function refreshOrders() {
       '<span class="ord-status">' + o.status + '</span>' +
     '</div>'
   }).join('')
+}
+
+
+// ── Tab management ────────────────────────────────────────────────────────────
+function switchTab(name) {
+  // Save preference
+  try { localStorage.setItem('activeTab', name) } catch(e) {}
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === name)
+  })
+  document.querySelectorAll('.tab-content').forEach(tab => {
+    tab.classList.toggle('hidden', tab.id !== 'tab-' + name)
+  })
+
+  // Populate log tab when switched to
+  if (name === 'log') renderLogTab()
+}
+
+function renderLogTab() {
+  const container   = document.getElementById('log-container')
+  const tickerSel   = document.getElementById('log-filter-ticker')
+  const severitySel = document.getElementById('log-filter-severity')
+  if (!container) return
+
+  const filterTicker   = tickerSel?.value   || ''
+  const filterSeverity = severitySel?.value || ''
+
+  // Collect all alerts from all tickers
+  const cache = AlertManager.getCache ? AlertManager.getCache() : {}
+  let all = []
+  Object.entries(cache).forEach(([ticker, alerts]) => {
+    alerts.forEach(a => all.push({ ...a, ticker }))
+  })
+
+  // Sort newest first
+  all.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+
+  // Filter
+  if (filterTicker)   all = all.filter(a => a.ticker === filterTicker)
+  if (filterSeverity) all = all.filter(a => a.severity === filterSeverity)
+
+  // Update ticker dropdown options
+  const tickers = [...new Set(Object.keys(cache))]
+  const prevTicker = tickerSel?.value
+  if (tickerSel) {
+    tickerSel.innerHTML = '<option value="">All tickers</option>'
+    tickers.forEach(t => {
+      const opt = document.createElement('option')
+      opt.value = t; opt.textContent = t
+      tickerSel.appendChild(opt)
+    })
+    if (prevTicker) tickerSel.value = prevTicker
+  }
+
+  if (all.length === 0) {
+    container.innerHTML = '<div class="no-data">No alerts in log</div>'
+    return
+  }
+
+  const now = Date.now()
+  container.innerHTML = all.map(alert => {
+    const cls  = severityClass(alert.severity)
+    const time = new Date(alert.timestamp).toLocaleTimeString('en-US', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    })
+    const stale = (now - new Date(alert.timestamp).getTime()) > 10 * 60 * 1000
+    const viewBtn = alert.url
+      ? '<button class="alert-view-btn" onclick="AlertManager.openUrl(this.dataset.url)" data-url="' + encodeURIComponent(alert.url || '') + '" title="View article">🔗</button>'
+      : ''
+    return '<div class="alert-item ' + cls + (stale ? ' alert-stale' : '') + '" data-uid="' + alert.uid + '">' +
+      '<div class="alert-dot"></div>' +
+      '<div class="alert-body">' +
+        '<div>' + alert.label + ' <span style="font-size:10px;opacity:0.65;">' + (alert.ticker || '') + '</span></div>' +
+        '<div class="alert-time">' + time + (stale ? ' · stale' : '') + '</div>' +
+      '</div>' +
+      viewBtn +
+      '<button class="alert-send-btn" onclick="AlertManager.sendAlertByUid(\'' + alert.uid + '\')">Send ↗</button>' +
+      '<button class="alert-x-btn" onclick="AlertManager.removeAlertGlobal(\'' + alert.uid + '\');renderLogTab()" title="Remove">✕</button>' +
+    '</div>'
+  }).join('')
+}
+
+function severityClass(severity) {
+  const map = { danger: 'alert-danger', warning: 'alert-warning', info: 'alert-info', success: 'alert-success' }
+  return map[severity] || 'alert-info'
+}
+
+function updateAlertBadge() {
+  const badge = document.getElementById('alert-badge')
+  if (!badge) return
+  const cache = AlertManager.getCache ? AlertManager.getCache() : {}
+  const ticker = state.ticker
+  const count = (cache[ticker] || []).length
+  if (count > 0) {
+    badge.textContent = count > 99 ? '99+' : count
+    badge.classList.remove('hidden')
+  } else {
+    badge.classList.add('hidden')
+  }
 }
 
 init()

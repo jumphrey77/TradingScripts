@@ -879,3 +879,84 @@ select:focus, .ticker-in:focus, input:focus {
   flex-shrink: 0;
 }
 .alert-view-btn:hover { opacity: 1; }
+
+/* ── Tab bar ──────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  padding: 6px 0 0;
+  border-bottom: 0.5px solid var(--border);
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+.tab-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  position: relative;
+  transition: color 0.15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+}
+
+/* ── Alert badge on Log tab ───────────────────────────────────── */
+.alert-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--red);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0 4px;
+  margin-left: 3px;
+  vertical-align: middle;
+}
+
+/* ── Tab content ──────────────────────────────────────────────── */
+.tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+/* ── Log tab filter bar ───────────────────────────────────────── */
+.log-filter-bar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+/* ── Section header row with action ──────────────────────────── */
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+.section-header-row .section-label { margin-bottom: 0; }
+
+.btn-send-all-sm {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 0.5px solid var(--amber-b);
+  background: var(--amber-bg);
+  color: var(--amber);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
