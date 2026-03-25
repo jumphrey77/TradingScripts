@@ -51,15 +51,12 @@ class AlpacaService extends EventEmitter {
       // feed was passed to new Alpaca({ feed }) — 'iex' or 'sip'
       this.socket = this.client.data_stream_v2
       console.log('[WS] Connecting with feed:', this.config.dataFeed || 'iex')
-      console.log('[WS] Socket object type:', typeof this.socket)
-      console.log('[WS] Socket methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(this.socket)).join(', '))
 
       this.socket.onConnect(() => {
         console.log('[WS] *** CONNECTED ***')
         this.emit('connected')
         if (this.ticker) {
-          console.log('[WS] Auto-subscribing to', this.ticker)
-          this._subscribeSocket(this.ticker)
+              this._subscribeSocket(this.ticker)
         }
       })
 
@@ -80,9 +77,7 @@ class AlpacaService extends EventEmitter {
         console.error('[WS] *** ERROR ***', err)
       })
 
-      console.log('[WS] Calling connect()...')
       this.socket.connect()
-      console.log('[WS] connect() called')
 
     } catch (e) {
       console.error('[WS] Connect failed:', e.message, e.stack)
@@ -175,7 +170,7 @@ class AlpacaService extends EventEmitter {
         }))
         this.bars5m  = norm(d5.bars  || [])
         this.bars15m = norm(d15.bars || [])
-        console.log(`[${ticker}] 5m/15m refreshed - RSI 5m: ${this._calcRSIFromBars(this.bars5m,14)} 15m: ${this._calcRSIFromBars(this.bars15m,14)}`)
+
       } catch(e) {
         console.error(`[${ticker}] 5m/15m refresh failed:`, e.message)
       }
@@ -338,7 +333,7 @@ class AlpacaService extends EventEmitter {
         bars:     bars.slice(-15)
       }
 
-      console.log(`[${ticker}] Loaded ${bars.length} bars - RSI 1m: ${indicators.rsi} 5m: ${rsi5m} 15m: ${rsi15m}, MACD: ${indicators.macd}, VWAP: ${vwap}`)
+      console.log(`[${ticker}] Ready — RSI:${indicators.rsi} MACD:${indicators.macd} VWAP:${vwap}`)
       this.emit('indicators', indicators)
 
     } catch (e) {

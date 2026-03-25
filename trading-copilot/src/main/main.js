@@ -64,9 +64,9 @@ function createConfigWindow() {
     title:     'Settings',
     parent:    mainWindow,
     modal:     false,
-    minimizable:  false,        // SET-4: no minimize
-    maximizable:  false,        // prevent maximize
-    center:       true,         // SET-2: always center on screen
+    minimizable:  false,
+    maximizable:  false,
+    center:       false,        // we position manually below
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -77,7 +77,16 @@ function createConfigWindow() {
 
   configWindow.loadFile(path.join(__dirname, '../renderer/config.html'))
   configWindow.setMenu(null)
-  configWindow.center()        // force center even if docked parent
+
+  // Center on the display the cursor is on (not over the parent window)
+  const { screen } = require('electron')
+  const cursor  = screen.getCursorScreenPoint()
+  const display = screen.getDisplayNearestPoint(cursor)
+  const { bounds } = display
+  const winW = 520, winH = 640
+  const x = Math.round(bounds.x + (bounds.width  - winW) / 2)
+  const y = Math.round(bounds.y + (bounds.height - winH) / 2)
+  configWindow.setPosition(x, y)
 
   configWindow.on('closed', () => {
     configWindow = null
@@ -267,7 +276,6 @@ ipcMain.handle('trade:submitOrder', async (event, order) => {
     const baseUrl = config.alpacaBaseUrl || 'https://paper-api.alpaca.markets'
     // order payload is built fully in renderer and passed through
     const payload = JSON.stringify(order)
-    console.log('[Trade] Submitting order:', payload)
     const resp = await apiFetch(`${baseUrl}/v2/orders`, {
       method:  'POST',
       headers: {
@@ -278,7 +286,7 @@ ipcMain.handle('trade:submitOrder', async (event, order) => {
       body: payload
     })
     const data = await resp.json()
-    console.log('[Trade] Order response:', JSON.stringify(data).slice(0, 200))
+    if (data.code) console.error('[Trade] Order error:', data.message)
     if (data.code) {
       // Alpaca error response has a code field
       return { success: false, error: data.message || JSON.stringify(data) }

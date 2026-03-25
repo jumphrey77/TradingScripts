@@ -328,8 +328,7 @@ function setupAlpacaListeners() {
       setupRepositionHovers(state.allowReposition)
     }
     if (state.ticker) {
-      console.log('[Panel] Re-subscribing', state.ticker, 'after config change')
-      window.copilot.unsubscribe(state.ticker)
+  window.copilot.unsubscribe(state.ticker)
       setTimeout(() => {
         window.copilot.subscribe(state.ticker)
         window.copilot.setTradeContext({ ticker: state.ticker, strategy: state.strategy })
