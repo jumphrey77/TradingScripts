@@ -22,6 +22,7 @@ class AlpacaService extends EventEmitter {
     this.tradeCtx    = {}          // entry, stop, targets from UI
     this.alertCooldowns = {}       // prevent alert spam
     this.vwap        = null              // session VWAP from Alpaca dailyBar.vw
+    this.vwapAccum   = { pv: 0, vol: 0 } // cumulative for intrabar updates
     this._init()
   }
 
@@ -96,6 +97,7 @@ class AlpacaService extends EventEmitter {
     this._sessionLow  = null
     this._sessionOpen = null
     this.vwap         = null
+    this.vwapAccum    = { pv: 0, vol: 0 }
     this._prevRSI     = null
     this._prevMACD    = null
     this._prevSignal  = null
@@ -170,12 +172,19 @@ class AlpacaService extends EventEmitter {
         const snap = await resp.json()
         const db   = snap.dailyBar || snap.snapshot?.dailyBar || {}
         const vw   = db.vw || db.VWAP || db.vwap || null
-        if (vw && vw !== this.vwap) {
-          this.vwap = vw
-          // Also update session H/L/O
+        if (vw) {
+          // Update session H/L/O
           if (db.h && db.h > (this._sessionHigh || 0)) this._sessionHigh = db.h
           if (db.l && (!this._sessionLow || db.l < this._sessionLow)) this._sessionLow = db.l
           if (db.o && !this._sessionOpen) this._sessionOpen = db.o
+          // Only reseed accumulator if Alpaca's VWAP diverges >2% from ours
+          // (handles trading halts, gaps, or missed bars)
+          const ourVwap = this.vwapAccum.vol > 0
+            ? this.vwapAccum.pv / this.vwapAccum.vol : 0
+          if (ourVwap === 0 || Math.abs(ourVwap - vw) / vw > 0.02) {
+            this.vwapAccum.pv = vw * this.vwapAccum.vol
+            this.vwap = vw
+          }
         }
       } catch(e) {}
     }
@@ -204,8 +213,13 @@ class AlpacaService extends EventEmitter {
           low: b.l||b.low, close: b.c||b.close,
           volume: b.v||b.volume, time: b.t||b.timestamp
         }))
-        this.bars5m  = norm(d5.bars  || [])
-        this.bars15m = norm(d15.bars || [])
+        // Build arrays locally first, then assign atomically
+        // Prevents _handleBar reading a partially-built array
+        const new5m  = norm(d5.bars  || [])
+        const new15m = norm(d15.bars || [])
+        // Only replace if we got valid data (don't clobber with empty on network error)
+        if (new5m.length  > 0) this.bars5m  = new5m
+        if (new15m.length > 0) this.bars15m = new15m
 
       } catch(e) {
         console.error(`[${ticker}] 5m/15m refresh failed:`, e.message)
@@ -325,9 +339,28 @@ class AlpacaService extends EventEmitter {
       if (sessionHigh) this._sessionHigh = sessionHigh
       if (sessionLow)  this._sessionLow  = sessionLow
       if (sessionOpen) this._sessionOpen = sessionOpen
-        // VWAP: always use Alpaca's official session VWAP from dailyBar.vw
-      // We never calculate it ourselves — Alpaca has all trades since open
-      this.vwap = alpacaVwap || null
+        // VWAP: seed accumulator from all loaded bars
+      // This lets us update smoothly on each new bar without waiting 60s
+      this.vwapAccum = { pv: 0, vol: 0 }
+      bars.forEach(b => {
+        const tp = (b.high + b.low + b.close) / 3
+        this.vwapAccum.pv  += tp * b.volume
+        this.vwapAccum.vol += b.volume
+      })
+      // Use Alpaca's dailyBar.vw as truth if our accumulation diverges
+      // (our bars may not go back to exact market open)
+      if (alpacaVwap) {
+        const ourVwap = this.vwapAccum.vol > 0
+          ? this.vwapAccum.pv / this.vwapAccum.vol : 0
+        // If divergence > 2% trust Alpaca's value and reseed accumulator
+        if (ourVwap === 0 || Math.abs(ourVwap - alpacaVwap) / alpacaVwap > 0.02) {
+          // Reseed: back-calculate pv from Alpaca's vwap and our total volume
+          this.vwapAccum.pv = alpacaVwap * this.vwapAccum.vol
+        }
+      }
+      this.vwap = this.vwapAccum.vol > 0
+        ? parseFloat((this.vwapAccum.pv / this.vwapAccum.vol).toFixed(4))
+        : alpacaVwap || null
 
       const vwap = this.vwap || alpacaVwap || lastBar.close
 
@@ -442,6 +475,13 @@ class AlpacaService extends EventEmitter {
       spreadPct: ask > 0 ? parseFloat(((ask - bid) / ask * 100).toFixed(2)) : 0,
       time:      quote.Timestamp ?? quote.t
     }
+    // Update session high/low from live price (for range bar real-time accuracy)
+    // Use mid-price but only if both bid and ask are valid
+    if (bid > 0 && ask > 0 && ask >= bid) {
+      const mid = (bid + ask) / 2
+      if (!this._sessionHigh || mid > this._sessionHigh) this._sessionHigh = mid
+      if (!this._sessionLow  || mid < this._sessionLow)  this._sessionLow  = mid
+    }
     this.emit('quote', data)
     this._checkAlerts(data)
   }
@@ -468,7 +508,13 @@ class AlpacaService extends EventEmitter {
     if (!this._sessionLow  || b.low  < this._sessionLow)  this._sessionLow  = b.low
     if (!this._sessionOpen) this._sessionOpen = b.open
 
-    // VWAP: use cached value from dailyBar.vw (refreshed every 60s via _startVwapRefresh)
+    // VWAP: update accumulator with this bar, recalculate smoothly
+    const tp = (b.high + b.low + b.close) / 3
+    this.vwapAccum.pv  += tp * b.volume
+    this.vwapAccum.vol += b.volume
+    this.vwap = this.vwapAccum.vol > 0
+      ? parseFloat((this.vwapAccum.pv / this.vwapAccum.vol).toFixed(4))
+      : this.vwap
     const vwap = this.vwap || b.close
 
     // Calculate indicators
@@ -594,7 +640,9 @@ class AlpacaService extends EventEmitter {
 
   // ── Data feed helper ──────────────────────────────────────────────────────
   _feed() {
-    return this.config.dataFeed || 'iex'
+    const feed = this.config.dataFeed || 'iex'
+    // Validate — only 'iex' and 'sip' are valid Alpaca feed values
+    return (feed === 'sip') ? 'sip' : 'iex'
   }
 
   // ── Volume Calculations ───────────────────────────────────────────────────
