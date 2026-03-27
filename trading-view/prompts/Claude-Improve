@@ -1,5 +1,9 @@
 Backtest Strategy Prompt
-backtest this strategy contained in the supertrend.pine, on the BTCUSD 1D chart and give me the results.
+backtest this strategy contained in the supertrend.pine, on the
+
+Pine Script Location in Github: trading-view/pine_scripts/01-supertrend/AI-SuperTrend-Claude.pine
+DOGEUSD test Data on GithubL : trading-view/pine_scripts/01-supertrend/testdata/AI_-_Supertrend_-_Claude_COINBASE_DOGEUSD_2026-03-27.csv
+DOGEUSD 1D chart and give me the results.
 Improve Strategy Prompt
 Explore how to improve the the attached pine strategy so that it has a much higher Profit with the same or lower Max Drawdown.
 Check its losing trades and avoid them.

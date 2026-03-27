@@ -1,9 +1,19 @@
 {
-  "id": "ABC",
-  "type": "Crypto",
-  "source": "TradingView",
+  "version": "2.0",
+  "settings": {
+    "id": "ABC",
+    "type": "Crypto",
+    "source": "TradingView"
+  },
+  "availabe": {
+    "generals": "{{ticker}}-{{exchange}}-{{interval}}-{{time}}-{{timenow}}",
+    "symbol-data": "{{open}}-{{close}}-{{high}}-{{low}}"
+  },
   "ticker": "{{ticker}}",
+  "exchange": "{{exchange}}",
+  "interval": "{{interval}}",
   "price": "{{close}}",
+  "Volume": "{{volume}}",
   "action": "{{strategy.order.action}}",
   "time": "{{time}}"
 }

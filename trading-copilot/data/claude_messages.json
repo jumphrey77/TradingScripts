@@ -772,6 +772,8 @@
       "id": "msg_snapshot",
       "label": "Data Snapshot - all indicators",
       "category": "analysis",
+      "description": "Data Snapshot - all indicators",
+      "strategy": "all",
       "favorite": true,
       "buttonText": "📊 Snapshot",
       "buttonStyle": "blue",

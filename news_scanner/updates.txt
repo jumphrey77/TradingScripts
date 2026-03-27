@@ -1,0 +1,10 @@
+========================================
+## NEWS SCANNER
+========================================
+
+FEATURES
+1.  Need to update and make calls for data using Alpaca.
+2.  Goal : Not only get price data but monitor the ticker and see id the price adjusts.
+3.  Data Needed:
+    a.  Intsant Price :  
+    b.  Yesterdays Previous CLose
