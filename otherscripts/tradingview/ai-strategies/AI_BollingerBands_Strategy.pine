@@ -29,18 +29,18 @@ inDateRange = time >= startDate and time <= endDate
 // ─────────────────────────────────────────────
 // MA FUNCTION
 // ─────────────────────────────────────────────
-ma(source, length, _type) =>
-    switch _type
-        "SMA" => ta.sma(source, length)
-        "EMA" => ta.ema(source, length)
-        "SMMA (RMA)" => ta.rma(source, length)
-        "WMA" => ta.wma(source, length)
-        "VWMA" => ta.vwma(source, length)
+bbMa(bbSrc, bbLen, bbType) =>
+    switch bbType
+        "SMA" => ta.sma(bbSrc, bbLen)
+        "EMA" => ta.ema(bbSrc, bbLen)
+        "SMMA (RMA)" => ta.rma(bbSrc, bbLen)
+        "WMA" => ta.wma(bbSrc, bbLen)
+        "VWMA" => ta.vwma(bbSrc, bbLen)
 
 // ─────────────────────────────────────────────
 // BOLLINGER BANDS CALCULATION
 // ─────────────────────────────────────────────
-basis = ma(src, length, maType)
+basis = bbMa(src, length, maType)
 dev   = mult * ta.stdev(src, length)
 upper = basis + dev
 lower = basis - dev

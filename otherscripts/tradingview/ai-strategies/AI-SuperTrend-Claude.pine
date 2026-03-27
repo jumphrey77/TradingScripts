@@ -1,31 +1,72 @@
 //@version=6
-strategy("AI - Supertrend - Claude", overlay=true, calc_on_every_tick=false, initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.1, slippage=3, pyramiding=1, margin_long=0, margin_short=0, fill_orders_on_standard_ohlc=true)
+strategy("AI - Supertrend", overlay=true, calc_on_every_tick=false, initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.1, slippage=3, pyramiding=1, margin_long=0, margin_short=0, fill_orders_on_standard_ohlc=true)
 
-// ─── INPUTS ───────────────────────────────────────────────────────────────────
+// ─── SUPERTREND INPUTS ────────────────────────────────────────────────────────
 atrPeriod = input.int(10,    "ATR Length", minval = 1)
 factor    = input.float(3.0, "Factor",     minval = 0.01, step = 0.01)
+
+// ─── RSI EXIT INPUTS ──────────────────────────────────────────────────────────
+useRsiExit    = input.bool(true, "Enable RSI Exit",       group = "RSI Exit")
+rsiLength     = input.int(14,   "RSI Length", minval = 1, group = "RSI Exit")
+rsiOverbought = input.int(80,   "RSI Overbought Level",   group = "RSI Exit", minval = 50, maxval = 100)
+
+// ─── STOP LOSS INPUTS ─────────────────────────────────────────────────────────
+useStop      = input.bool(true,  "Enable ATR Stop Loss",             group = "Stop Loss")
+slAtrMult    = input.float(1.5,  "ATR Multiplier",  minval = 0.1, step = 0.1, group = "Stop Loss")
+useHardStop  = input.bool(false, "Enable Hard % Floor",              group = "Stop Loss")
+hardStopPct  = input.float(8.0,  "Hard Stop %",     minval = 0.1, step = 0.1, group = "Stop Loss")
 
 // ─── DATE FILTER ──────────────────────────────────────────────────────────────
 startDate = input.time(timestamp("01 Jan 2018 00:00 +0000"), "Start Date", group = "Backtest Date Range")
 endDate   = input.time(timestamp("31 Dec 2069 23:59 +0000"), "End Date",   group = "Backtest Date Range")
 inWindow  = time >= startDate and time <= endDate
 
-// ─── SUPERTREND CALCULATION ───────────────────────────────────────────────────
+// ─── SUPERTREND ───────────────────────────────────────────────────────────────
 [supertrend, direction] = ta.supertrend(factor, atrPeriod)
-
 supertrend := barstate.isfirst ? na : supertrend
 
-// ─── PLOTS (preserved from indicator) ────────────────────────────────────────
-upTrend    = plot(direction < 0 ? supertrend : na, "Up Trend",   color = color.green, style = plot.style_linebr, offset = 0)
-downTrend  = plot(direction < 0 ? na : supertrend, "Down Trend", color = color.red,   style = plot.style_linebr, offset = 0)
-bodyMiddle = plot(barstate.isfirst ? na : (open + close) / 2,    "Body Middle", display = display.none,          offset = 0)
+// ─── ATR & STOP LEVEL ─────────────────────────────────────────────────────────
+atrValue = ta.atr(atrPeriod)
 
-fill(bodyMiddle, upTrend,   title = "Uptrend background",   color = color.new(color.green, 90), fillgaps = false)
-fill(bodyMiddle, downTrend, title = "Downtrend background", color = color.new(color.red,   90), fillgaps = false)
+// ─── RSI ──────────────────────────────────────────────────────────────────────
+rsi = ta.rsi(close, rsiLength)
+
+// ─── RSI EXIT LOGIC ───────────────────────────────────────────────────────────
+var bool rsiTriggered = false
+
+if strategy.position_size == 0
+    rsiTriggered := false
+
+if strategy.position_size > 0 and not rsiTriggered and rsi >= rsiOverbought
+    rsiTriggered := true
+
+rsiExit = useRsiExit and rsiTriggered and strategy.position_size > 0
 
 // ─── ENTRY / EXIT CONDITIONS ──────────────────────────────────────────────────
 goLong = direction[1] > direction
 goFlat = direction[1] < direction
+
+// ─── STOP LOSS CALCULATION ────────────────────────────────────────────────────
+var float stopLevel = na
+
+if goLong and inWindow
+    atrStop  = close - atrValue * slAtrMult
+    hardStop = close * (1 - hardStopPct / 100)
+    stopLevel := useStop ? (useHardStop ? math.max(atrStop, hardStop) : atrStop) : na
+
+if strategy.position_size == 0
+    stopLevel := na
+
+// ─── PLOTS (preserved from indicator) ────────────────────────────────────────
+upTrend    = plot(direction < 0 ? supertrend : na, "Up Trend",   color = color.green, style = plot.style_linebr, offset = 0)
+downTrend  = plot(direction < 0 ? na : supertrend, "Down Trend", color = color.red,   style = plot.style_linebr, offset = 0)
+bodyMiddle = plot(barstate.isfirst ? na : (open + close) / 2,    "Body Middle", display = display.none, offset = 0)
+
+fill(bodyMiddle, upTrend,   title = "Uptrend background",   color = color.new(color.green, 90), fillgaps = false)
+fill(bodyMiddle, downTrend, title = "Downtrend background", color = color.new(color.red,   90), fillgaps = false)
+
+// ─── STOP LEVEL PLOT ──────────────────────────────────────────────────────────
+plot(strategy.position_size > 0 ? stopLevel : na, "ATR Stop", color = color.orange, style = plot.style_linebr, linewidth = 1, offset = 0)
 
 // ─── TRADE LINE DRAWING ───────────────────────────────────────────────────────
 var line  tradeLine  = na
@@ -35,17 +76,23 @@ if goLong and inWindow
     entryPrice := close
     tradeLine  := line.new(x1 = time, y1 = entryPrice, x2 = time + 1, y2 = entryPrice, xloc = xloc.bar_time, color = color.white, width = 2, style = line.style_solid, extend = extend.right)
 
-if goFlat and not na(tradeLine)
+if (goFlat or rsiExit or (useStop and not na(stopLevel) and low <= stopLevel)) and not na(tradeLine)
     tradeColor = close >= entryPrice ? color.green : color.red
     line.set_x2(tradeLine, time)
     line.set_y2(tradeLine, close)
     line.set_color(tradeLine, tradeColor)
     line.set_extend(tradeLine, extend.none)
-    tradeLine := na
+    tradeLine  := na
 
 // ─── STRATEGY ORDERS ──────────────────────────────────────────────────────────
 if inWindow and goLong
     strategy.entry("Long", strategy.long)
 
+if useStop and not na(stopLevel)
+    strategy.exit("SL", from_entry = "Long", stop = stopLevel, comment = "ATR Stop")
+
 if goFlat
-    strategy.close("Long")
+    strategy.close("Long", comment = "ST Flip")
+
+if rsiExit
+    strategy.close("Long", comment = "RSI Exit")
