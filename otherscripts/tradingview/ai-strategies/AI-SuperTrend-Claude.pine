@@ -1,0 +1,51 @@
+//@version=6
+strategy("AI - Supertrend - Claude", overlay=true, calc_on_every_tick=false, initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.1, slippage=3, pyramiding=1, margin_long=0, margin_short=0, fill_orders_on_standard_ohlc=true)
+
+// ─── INPUTS ───────────────────────────────────────────────────────────────────
+atrPeriod = input.int(10,    "ATR Length", minval = 1)
+factor    = input.float(3.0, "Factor",     minval = 0.01, step = 0.01)
+
+// ─── DATE FILTER ──────────────────────────────────────────────────────────────
+startDate = input.time(timestamp("01 Jan 2018 00:00 +0000"), "Start Date", group = "Backtest Date Range")
+endDate   = input.time(timestamp("31 Dec 2069 23:59 +0000"), "End Date",   group = "Backtest Date Range")
+inWindow  = time >= startDate and time <= endDate
+
+// ─── SUPERTREND CALCULATION ───────────────────────────────────────────────────
+[supertrend, direction] = ta.supertrend(factor, atrPeriod)
+
+supertrend := barstate.isfirst ? na : supertrend
+
+// ─── PLOTS (preserved from indicator) ────────────────────────────────────────
+upTrend    = plot(direction < 0 ? supertrend : na, "Up Trend",   color = color.green, style = plot.style_linebr, offset = 0)
+downTrend  = plot(direction < 0 ? na : supertrend, "Down Trend", color = color.red,   style = plot.style_linebr, offset = 0)
+bodyMiddle = plot(barstate.isfirst ? na : (open + close) / 2,    "Body Middle", display = display.none,          offset = 0)
+
+fill(bodyMiddle, upTrend,   title = "Uptrend background",   color = color.new(color.green, 90), fillgaps = false)
+fill(bodyMiddle, downTrend, title = "Downtrend background", color = color.new(color.red,   90), fillgaps = false)
+
+// ─── ENTRY / EXIT CONDITIONS ──────────────────────────────────────────────────
+goLong = direction[1] > direction
+goFlat = direction[1] < direction
+
+// ─── TRADE LINE DRAWING ───────────────────────────────────────────────────────
+var line  tradeLine  = na
+var float entryPrice = na
+
+if goLong and inWindow
+    entryPrice := close
+    tradeLine  := line.new(x1 = time, y1 = entryPrice, x2 = time + 1, y2 = entryPrice, xloc = xloc.bar_time, color = color.white, width = 2, style = line.style_solid, extend = extend.right)
+
+if goFlat and not na(tradeLine)
+    tradeColor = close >= entryPrice ? color.green : color.red
+    line.set_x2(tradeLine, time)
+    line.set_y2(tradeLine, close)
+    line.set_color(tradeLine, tradeColor)
+    line.set_extend(tradeLine, extend.none)
+    tradeLine := na
+
+// ─── STRATEGY ORDERS ──────────────────────────────────────────────────────────
+if inWindow and goLong
+    strategy.entry("Long", strategy.long)
+
+if goFlat
+    strategy.close("Long")

@@ -1,0 +1,69 @@
+//@version=6
+strategy("AI - Bollinger Bands", overlay=true, calc_on_every_tick=false, initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.1, slippage=3, pyramiding=1, margin_long=0, margin_short=0, fill_orders_on_standard_ohlc=true)
+
+// ─────────────────────────────────────────────
+// TOOLTIPS
+// ─────────────────────────────────────────────
+TT_LENGTH  = "The time period to be used in calculating the MA which creates the base for the Upper and Lower Bands."
+TT_MA_TYPE = "Determines the type of Moving Average that is applied to the basis plot line."
+TT_SOURCE  = "Determines what data from each bar will be used in calculations."
+TT_MULT    = "The number of Standard Deviations away from the MA that the Upper and Lower Bands should be."
+TT_OFFSET  = "Changing this number will move the Bollinger Bands either Forwards or Backwards relative to the current market."
+
+// ─────────────────────────────────────────────
+// INPUTS
+// ─────────────────────────────────────────────
+length = input.int(20,       "Length",        minval = 1,    tooltip = TT_LENGTH)
+maType = input.string("SMA", "Basis MA Type", options = ["SMA", "EMA", "SMMA (RMA)", "WMA", "VWMA"], tooltip = TT_MA_TYPE)
+src    = input(close,        "Source",        tooltip = TT_SOURCE)
+mult   = input.float(2.0,    "StdDev",        minval = 0.001, maxval = 50,  tooltip = TT_MULT)
+offset = input.int(0,        "Offset",        minval = -500,  maxval = 500, tooltip = TT_OFFSET, display = display.none)
+
+// ─────────────────────────────────────────────
+// DATE FILTER
+// ─────────────────────────────────────────────
+startDate = input.time(timestamp("2018-01-01"), "Start Date", group = "Date Filter")
+endDate   = input.time(timestamp("2069-12-31"), "End Date",   group = "Date Filter")
+inDateRange = time >= startDate and time <= endDate
+
+// ─────────────────────────────────────────────
+// MA FUNCTION
+// ─────────────────────────────────────────────
+ma(source, length, _type) =>
+    switch _type
+        "SMA" => ta.sma(source, length)
+        "EMA" => ta.ema(source, length)
+        "SMMA (RMA)" => ta.rma(source, length)
+        "WMA" => ta.wma(source, length)
+        "VWMA" => ta.vwma(source, length)
+
+// ─────────────────────────────────────────────
+// BOLLINGER BANDS CALCULATION
+// ─────────────────────────────────────────────
+basis = ma(src, length, maType)
+dev   = mult * ta.stdev(src, length)
+upper = basis + dev
+lower = basis - dev
+
+// ─────────────────────────────────────────────
+// ENTRY & EXIT CONDITIONS
+// ─────────────────────────────────────────────
+longCondition  = close > upper
+closeCondition = close < lower
+
+// ─────────────────────────────────────────────
+// STRATEGY ORDERS
+// ─────────────────────────────────────────────
+if inDateRange and longCondition
+    strategy.entry("Long", strategy.long)
+
+if inDateRange and closeCondition
+    strategy.close("Long")
+
+// ─────────────────────────────────────────────
+// PLOTS (preserved from original indicator)
+// ─────────────────────────────────────────────
+plot(basis, "Basis", color = #2962FF, offset = 0)
+p1 = plot(upper, "Upper", color = #F23645, offset = 0)
+p2 = plot(lower, "Lower", color = #089981, offset = 0)
+fill(p1, p2, title = "Background", color = color.rgb(33, 150, 243, 95))
