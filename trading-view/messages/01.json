@@ -5,9 +5,12 @@
     "type": "Crypto",
     "source": "TradingView"
   },
-  "availabe": {
+  "available": {
     "generals": "{{ticker}}-{{exchange}}-{{interval}}-{{time}}-{{timenow}}",
-    "symbol-data": "{{open}}-{{close}}-{{high}}-{{low}}"
+    "symbol-data": "{{open}}-{{close}}-{{high}}-{{low}}",
+    "curency": "{{syminfo.currency}} -{{syminfo.basecurrency}}",
+    "position": "{{strategy.position_size}}",
+    "order": "{{strategy.order.action}} {{strategy.order.contracts}}"
   },
   "ticker": "{{ticker}}",
   "exchange": "{{exchange}}",
