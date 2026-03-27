@@ -1,0 +1,35 @@
+//@version=6
+// ─── OHLCV DATA EXPORTER ───────────────────────────────────────────────────
+// How to use:
+//   1. Add this indicator to your chart (DOGE-USD, 5m timeframe)
+//   2. Scroll back as far as TradingView allows (use the date range selector)
+//   3. Open the Pine "Data Window" or use TradingView's built-in export:
+//      Right-click chart → "Export Chart Data..."
+//   4. Save the CSV
+//   5. Repeat for BTC-USD and ETH-USD for cross-market testing
+//
+// NOTE: TradingView's "Export Chart Data" (right-click → Export) will give
+// you OHLCV data directly without needing this script. This script is only
+// needed if you want to export via Pine's table/log method.
+//
+// EASIEST METHOD:
+//   Just right-click the chart → "Export Chart Data..." → save as CSV.
+//   Do this for each asset on the 5m timeframe.
+//   No indicator needed!
+
+indicator("OHLCV Exporter", overlay=true)
+
+// This indicator does nothing visual — it just confirms the data is loaded.
+// Use TradingView's native export: Right-click chart → "Export Chart Data..."
+
+plot(close, "Close", color=color.new(color.blue, 100))
+
+var label info = na
+if barstate.islast
+    info := label.new(
+         bar_index, high,
+         "Ready to export!\n\nRight-click chart → Export Chart Data...\nSave as CSV.\n\nTimeframe: 5m\nAsset: " + syminfo.ticker,
+         style=label.style_label_down,
+         color=color.green,
+         textcolor=color.white,
+         size=size.large)
