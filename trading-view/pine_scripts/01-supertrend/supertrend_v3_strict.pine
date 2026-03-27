@@ -1,0 +1,193 @@
+//@version=6
+strategy("AI - Supertrend v3 Strict", overlay=true, calc_on_every_tick=false, initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.1, slippage=3, pyramiding=1, margin_long=0, margin_short=0, fill_orders_on_standard_ohlc=true)
+
+// ─── STRATEGY META ──────────────────────────────────────────────────────────
+// Timeframe: 5m
+// Best performing strategy across 4 assets (DOGE, BTC, ETH, SOL) over 3 years.
+// Cross-market validated with in-sample/out-of-sample split (70/30).
+//
+// Key improvements over v1:
+//   1. Higher SuperTrend factor (5.0) to dramatically reduce whipsaw signals
+//   2. Strict ADX filter (>30) — only trades strong trends
+//   3. EMA 100 trend filter — only long above the trend
+//   4. Volume confirmation (>1.0x SMA 20) — confirms momentum
+//   5. Trailing ATR stop (3.0x) with hard floor (8%) — wider to avoid noise
+//   6. Cooldown (12 bars after stop) — prevents revenge trading
+//   7. Min hold period (6 bars) — avoids exiting too quickly
+//   8. RSI exit at 70 — takes profit earlier in overbought conditions
+//
+// Backtest results (averaged across DOGE, BTC, ETH, SOL — 3 years):
+//   Full:   Net P&L: -8.06%, Max DD: -14.98%, Win Rate: 41.94%, PF: 0.78
+//   OOS:    Net P&L: -1.98%, Max DD:  -6.74%, Win Rate: ~42%,   Score: 30.20
+
+// ─── SUPERTREND INPUTS ──────────────────────────────────────────────────────
+atrPeriod = input.int(14,    "ATR Length",  minval = 1)
+factor    = input.float(5.0, "Factor",      minval = 0.01, step = 0.01)
+
+// ─── ADX FILTER ─────────────────────────────────────────────────────────────
+useAdx      = input.bool(true, "Enable ADX Filter",        group = "ADX Filter")
+adxLen      = input.int(14,    "ADX Length",    minval = 1, group = "ADX Filter")
+adxThresh   = input.int(30,    "ADX Threshold", minval = 5, group = "ADX Filter")
+
+// ─── EMA TREND FILTER ──────────────────────────────────────────────────────
+useEma      = input.bool(true, "Enable EMA Trend Filter",  group = "EMA Filter")
+emaLen      = input.int(100,   "EMA Length",    minval = 5, group = "EMA Filter")
+
+// ─── VOLUME FILTER ─────────────────────────────────────────────────────────
+useVolFilter  = input.bool(true, "Enable Volume Filter",   group = "Volume Filter")
+volMaLen      = input.int(20,    "Volume MA Length",        group = "Volume Filter")
+volMultiplier = input.float(1.0, "Volume Multiplier",      group = "Volume Filter", minval = 0.1, step = 0.1)
+
+// ─── RSI EXIT ──────────────────────────────────────────────────────────────
+useRsiExit    = input.bool(true, "Enable RSI Exit",        group = "RSI Exit")
+rsiLength     = input.int(14,    "RSI Length",  minval = 1, group = "RSI Exit")
+rsiOverbought = input.int(70,    "RSI Overbought Level",   group = "RSI Exit", minval = 50, maxval = 100)
+
+// ─── STOP LOSS ─────────────────────────────────────────────────────────────
+useStop      = input.bool(true,  "Enable ATR Trailing Stop",           group = "Stop Loss")
+slAtrMult    = input.float(3.0,  "ATR Multiplier",  minval = 0.1, step = 0.1, group = "Stop Loss")
+useHardStop  = input.bool(true,  "Enable Hard % Floor",                group = "Stop Loss")
+hardStopPct  = input.float(8.0,  "Hard Stop %",     minval = 0.1, step = 0.1, group = "Stop Loss")
+
+// ─── COOLDOWN ──────────────────────────────────────────────────────────────
+useCooldown    = input.bool(true, "Enable Cooldown After Stop",        group = "Cooldown")
+cooldownBars   = input.int(12,    "Cooldown Bars After Stop", minval = 1, group = "Cooldown")
+
+// ─── MIN HOLD ──────────────────────────────────────────────────────────────
+useMinHold   = input.bool(true, "Enable Min Hold Period",              group = "Min Hold")
+minHoldBars  = input.int(6,     "Min Hold Bars",          minval = 1,  group = "Min Hold")
+
+// ─── DATE FILTER ───────────────────────────────────────────────────────────
+startDate = input.time(timestamp("01 Jan 2018 00:00 +0000"), "Start Date", group = "Backtest Date Range")
+endDate   = input.time(timestamp("31 Dec 2069 23:59 +0000"), "End Date",   group = "Backtest Date Range")
+inWindow  = time >= startDate and time <= endDate
+
+// ─── SUPERTREND ────────────────────────────────────────────────────────────
+[supertrend, direction] = ta.supertrend(factor, atrPeriod)
+supertrend := barstate.isfirst ? na : supertrend
+
+// ─── ATR ───────────────────────────────────────────────────────────────────
+atrValue = ta.atr(atrPeriod)
+
+// ─── ADX ───────────────────────────────────────────────────────────────────
+dirmov(len) =>
+    up   = ta.change(high)
+    down = -ta.change(low)
+    plusDM  = na(up)   ? na : (up > down and up > 0   ? up   : 0)
+    minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+    truerange = ta.rma(ta.tr, len)
+    plus  = fixnan(100 * ta.rma(plusDM, len) / truerange)
+    minus = fixnan(100 * ta.rma(minusDM, len) / truerange)
+    [plus, minus]
+
+adx(dilen, adxlen) =>
+    [plus, minus] = dirmov(dilen)
+    sum = plus + minus
+    adxVal = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), adxlen)
+    adxVal
+
+adxValue = adx(adxLen, adxLen)
+adxOk    = not useAdx or adxValue >= adxThresh
+
+// ─── EMA ───────────────────────────────────────────────────────────────────
+ema = ta.ema(close, emaLen)
+emaOk = not useEma or close > ema
+
+// ─── VOLUME ────────────────────────────────────────────────────────────────
+volMa = ta.sma(volume, volMaLen)
+volOk = not useVolFilter or volume > volMa * volMultiplier
+
+// ─── RSI ───────────────────────────────────────────────────────────────────
+rsi = ta.rsi(close, rsiLength)
+
+var bool rsiTriggered = false
+if strategy.position_size == 0
+    rsiTriggered := false
+if strategy.position_size > 0 and not rsiTriggered and rsi >= rsiOverbought
+    rsiTriggered := true
+
+// ─── COOLDOWN ──────────────────────────────────────────────────────────────
+var int barsSinceStop = 999
+barsSinceStop := barsSinceStop + 1
+cooldownOk = not useCooldown or barsSinceStop > cooldownBars
+
+// ─── MIN HOLD TRACKING ────────────────────────────────────────────────────
+var int barsInTrade = 0
+if strategy.position_size > 0
+    barsInTrade := barsInTrade + 1
+else
+    barsInTrade := 0
+holdOk = not useMinHold or barsInTrade >= minHoldBars
+
+// ─── ENTRY / EXIT CONDITIONS ───────────────────────────────────────────────
+goLong = direction[1] > direction
+goFlat = direction[1] < direction
+
+entryOk = goLong and inWindow and adxOk and emaOk and volOk and cooldownOk
+
+// RSI exit (only after min hold)
+rsiExit = useRsiExit and rsiTriggered and strategy.position_size > 0 and holdOk
+
+// ─── TRAILING STOP ─────────────────────────────────────────────────────────
+var float stopLevel = na
+
+if entryOk
+    atrStop  = close - atrValue * slAtrMult
+    hardStop = close * (1 - hardStopPct / 100)
+    stopLevel := useStop ? (useHardStop ? math.max(atrStop, hardStop) : atrStop) : na
+
+if strategy.position_size > 0 and useStop
+    newTrail = close - atrValue * slAtrMult
+    if not na(stopLevel) and newTrail > stopLevel
+        stopLevel := newTrail
+
+if strategy.position_size == 0
+    stopLevel := na
+
+// ─── PLOTS ─────────────────────────────────────────────────────────────────
+upTrend    = plot(direction < 0 ? supertrend : na, "Up Trend",   color = color.green, style = plot.style_linebr)
+downTrend  = plot(direction < 0 ? na : supertrend, "Down Trend", color = color.red,   style = plot.style_linebr)
+bodyMiddle = plot(barstate.isfirst ? na : (open + close) / 2,    "Body Middle", display = display.none)
+
+fill(bodyMiddle, upTrend,   title = "Uptrend background",   color = color.new(color.green, 90), fillgaps = false)
+fill(bodyMiddle, downTrend, title = "Downtrend background", color = color.new(color.red,   90), fillgaps = false)
+
+plot(strategy.position_size > 0 ? stopLevel : na, "Trailing Stop", color = color.orange, style = plot.style_linebr, linewidth = 1)
+plot(useEma ? ema : na, "EMA Filter", color = color.new(color.yellow, 30), linewidth = 1)
+
+bgcolor(useAdx and not adxOk ? color.new(color.gray, 90) : na, title = "ADX Filter Off")
+
+// ─── TRADE LINE DRAWING ────────────────────────────────────────────────────
+var line  tradeLine  = na
+var float entryPrice = na
+
+if entryOk
+    entryPrice := close
+    tradeLine  := line.new(x1 = time, y1 = entryPrice, x2 = time + 1, y2 = entryPrice,
+         xloc = xloc.bar_time, color = color.white, width = 2, style = line.style_solid, extend = extend.right)
+
+if (goFlat or rsiExit or (useStop and not na(stopLevel) and low <= stopLevel)) and not na(tradeLine)
+    tradeColor = close >= entryPrice ? color.green : color.red
+    line.set_x2(tradeLine, time)
+    line.set_y2(tradeLine, close)
+    line.set_color(tradeLine, tradeColor)
+    line.set_extend(tradeLine, extend.none)
+    tradeLine := na
+
+// ─── STRATEGY ORDERS ───────────────────────────────────────────────────────
+if entryOk
+    strategy.entry("Long", strategy.long)
+
+if useStop and not na(stopLevel)
+    strategy.exit("SL", from_entry = "Long", stop = stopLevel, comment = "Trail Stop")
+
+if goFlat and holdOk
+    strategy.close("Long", comment = "ST Flip")
+
+if rsiExit
+    strategy.close("Long", comment = "RSI Exit")
+
+// Track cooldown on stop hit
+if strategy.position_size == 0 and strategy.position_size[1] > 0
+    if useStop and not na(stopLevel[1]) and low[1] <= stopLevel[1]
+        barsSinceStop := 0
