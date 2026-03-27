@@ -1,0 +1,9 @@
+{
+  "id": "ABC",
+  "type": "Crypto",
+  "source": "TradingView",
+  "ticker": "{{ticker}}",
+  "price": "{{close}}",
+  "action": "{{strategy.order.action}}",
+  "time": "{{time}}"
+}
