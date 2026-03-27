@@ -1,0 +1,24 @@
+Backtest Strategy Prompt
+backtest this strategy contained in the supertrend.pine, on the BTCUSD 1D chart and give me the results.
+Improve Strategy Prompt
+Explore how to improve the the attached pine strategy so that it has a much higher Profit with the same or lower Max Drawdown.
+Check its losing trades and avoid them.
+Check trades that were missed and try to catch them.
+Try to avoid sideways markets.
+Try to invest more/less equity per trade.
+Avoid curve fitting - use in/out sampling of different time periods or if not enough data available, use cross-market testing on the same timeframe.
+Backtest your ideas and give me the best performing one.
+Rank Strategies Prompt
+Create a Ranking System.
+Come up with a Risk vs. Reward Score where higher is better.
+Use best practices to come up with the Scoring Logic
+Avoid a Scoring Logic that uses multiple metrics that score the same thing so we don’t overweight Risk or Reward, we want a balance. 
+Of course we like to have Profit but the risk must be adequate.
+The Score must include data from ALL assets in the data folder to avoid Curve Fitting/Overfitting on one asset only.
+Each strategy is made for a timeframe, ask me which timeframe to use per strategy and remember it (you can put it in the pine and python code of that strategy to not forget).
+Run the backtests for all strategies and assets on their timeframe and compile a Score per strategy so you can rank them against each other.
+Remember the Scores in an XLSX file (create if it’s missing) and make sure the ranking is sorted by the score top-down. That ranking XLSX file shall be our database for the rankings and all backtest data you need to store for processing what you need.
+Evaluate against XLSX Prompt
+Validate your backtest results for supertrend_v2.pine against supertrend_v2.xlsx.
+
+Focus on Net Profit (without open trades) and Max Drawdown, which don’t match with TradingView’s XLSX numbers.

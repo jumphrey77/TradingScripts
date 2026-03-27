@@ -1912,3 +1912,140 @@ body, button, input, .project-card-name, .logo-text,
 
 .run-log-table td { white-space: nowrap; }
 .run-log-table td:nth-child(2) { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+
+/* ─── #0: Prominent run datetime ─────────────────────────────────────────── */
+
+.run-summary-datetime {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.run-datetime-value {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.run-datetime-duration {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ─── #3/#4/#8: Syne descender fix — universal ───────────────────────────── */
+
+* { overflow: visible; }
+
+.project-card, .detail-card, .modal, .run-summary-panel,
+.settings-section, .alert-banner, .attention-banner {
+  overflow: hidden;   /* containers that should clip */
+}
+
+h1, h2, h3, h4,
+.project-card-name, .logo-text, .compact-zone-name,
+.detail-card-title, .run-summary-title, .alert-title,
+.modal-header h2, .setup-card h2, .sidebar-header .logo-text {
+  line-height: 1.6 !important;
+  padding-bottom: 3px !important;
+  display: block;
+}
+
+/* ─── #4: Clear/Delete button distinction ────────────────────────────────── */
+
+/* Clear = outlined danger */
+.btn-clear {
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.btn-clear:hover { background: var(--danger-dim); }
+
+/* Delete = filled danger (existing btn-danger-sm is correct, just document it) */
+
+/* ─── #6: Excluded files section ─────────────────────────────────────────── */
+
+.excluded-file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  background: var(--bg-base);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+}
+
+.excluded-file-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--warning);
+}
+
+.btn-remove-excluded {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 2px;
+  transition: color var(--transition);
+}
+.btn-remove-excluded:hover { color: var(--danger); }
+
+/* ─── #8: Run history time right-aligned ─────────────────────────────────── */
+
+.run-log-table th:last-child,
+.run-log-table td:last-child { text-align: right; }
+
+.run-log-table th:nth-child(2),
+.run-log-table td:nth-child(2) { max-width: none; width: auto; }
+
+/* ─── Exclusions modal section labels ────────────────────────────────────── */
+
+.excl-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+/* ─── File map — excluded file row styling ───────────────────────────────── */
+
+.map-entry-excluded {
+  opacity: 0.65;
+}
+
+.excluded-path {
+  color: #c0392b !important;
+  font-style: italic;
+  font-size: 10px;
+}
+
+/* ─── Exclusion tag types — folder vs file ────────────────────────────────── */
+
+/* Folders: existing style (muted, line-through) */
+.exclusion-tag-folder {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-bright);
+}
+
+/* Files: warm amber, strikethrough, italic */
+.exclusion-tag-file {
+  color: #c0392b;
+  text-decoration: line-through;
+  text-decoration-color: #c0392b;
+  font-style: italic;
+  background: rgba(192,57,43,0.08);
+  border-color: rgba(192,57,43,0.3);
+}

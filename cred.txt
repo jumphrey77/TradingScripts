@@ -8,5 +8,15 @@ Key:        PKLW7WK6WNW3OXVESHSOCUK4M6
 Secret:     Em2cUYZzUPWL4xMX9kLxYvUhCCwBraBCe1r7gPW5zaqQ
 EndPoint:   https://paper-api.alpaca.markets/v2
 
+
+Trading View Authentication Backup Keys
+vsrSxuyd
+nHQonZhD
+fAJwqrtC
+ydOq1qgk
+M7OM16sD
+NQa0xytN
+
+
 Key For Trade Entry Checklist
 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

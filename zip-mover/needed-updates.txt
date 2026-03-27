@@ -1,25 +1,17 @@
 -------------------------------------------
 # ZIP MOVER ELECTRON APP
 -------------------------------------------
-## PRIORITY
+## FUTURE
 
-0. After a Run, I would like to see the date and time more prominant
 1.  If no files exist, brand new project, no files (manual initialization).  Suggestions
-2.  Compact View  - Still has lower left and right corners overshadowing (poking out of) 
-    over rounded corners
-3.  Missing lowercase g tail - look at Project Names, Dashbard Card Title
-4.  Question: Are thh Clear Log and the Delete Button the same style as far as colors 
-    (size should vary).
-5.  Settings Footer - Version of "v1.0.0" is still 1.0.0
-6.  On the Project Window we have "Excluded", which basically is for folders.  
-    I would like to add files to exclude, files that should not be moved. 
-    Example "gitignore".  Exluded files should be placed in a Project Foler\Excluded.  
-    Add a new Section under "UnMatched Files" for "Excluded Files"  
-7.  Run List how may Zip Files have been archive.  All a Clear Zip Archive that will delete 
-    all previoss Zip downloaded.
-8.  The Run History.  The name of the zip file is truncated, but there is a lot of wasted 
-    space.  Right align the Time.
-    9.  The Compact View should not have a 
+2.  Docked App to Sytem TradeType
+3.  Single Files still not working.
+
+## PRIORITY
+BUGS 
+Single File Drops are still not working.
+
+FEATURES
 
 
 

@@ -1,5 +1,5 @@
 // src/main/preload.js
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('zipmover', {
   // ── State ─────────────────────────────────────────────────────────────────
@@ -23,8 +23,10 @@ contextBridge.exposeInMainWorld('zipmover', {
   openProjectFolder: (name) => ipcRenderer.invoke('open-project-folder', { name }),
   openRootFolder:    ()     => ipcRenderer.invoke('open-root-folder'),
   openRunLog:        (name) => ipcRenderer.invoke('open-run-log',      { name }),
-  clearRunLog:       (name) => ipcRenderer.invoke('clear-run-log',     { name }),
-  getMapWithSizes:   (name) => ipcRenderer.invoke('get-map-with-sizes', { name }),
+  clearRunLog:          (name) => ipcRenderer.invoke('clear-run-log',         { name }),
+  getMapWithSizes:      (name) => ipcRenderer.invoke('get-map-with-sizes',    { name }),
+  clearZipArchive:      (name) => ipcRenderer.invoke('clear-zip-archive',     { name }),
+  getZipArchiveCount:   (name) => ipcRenderer.invoke('get-zip-archive-count', { name }),
 
   // ── Projects ──────────────────────────────────────────────────────────────
   createProject:   (name, destinationRoot, excludedFolders) => ipcRenderer.invoke('create-project', { name, destinationRoot, excludedFolders }),
@@ -41,6 +43,9 @@ contextBridge.exposeInMainWorld('zipmover', {
   browseFolder:    ()                    => ipcRenderer.invoke('browse-folder'),
   updateConfig:    (updates)             => ipcRenderer.invoke('update-config',            updates),
   processZip:      (pn, zp)             => ipcRenderer.invoke('process-zip',              { projectName: pn, zipPath: zp }),
+
+  // ── File path resolution (required for drag-and-drop with contextIsolation) ──
+  getPathForFile: (file) => webUtils.getPathForFile(file),
 
   // ── Events ────────────────────────────────────────────────────────────────
   onStateUpdate:  (cb) => { ipcRenderer.on('state-update',  (e, d) => cb(d)); return () => ipcRenderer.removeAllListeners('state-update');  },

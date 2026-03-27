@@ -337,3 +337,46 @@ html, body.compact-body {
   flex-shrink: 0;
   opacity: 0.6;
 }
+
+/* ─── #2: Fix corners overshooting — clip at app level only ──────────────── */
+
+html {
+  background: transparent !important;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+body.compact-body {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 10px;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+#compactApp {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-bright);
+  background: var(--bg-base);
+  /* Clip ALL children to the rounded corners */
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  mask-image: radial-gradient(white, black);
+}
+
+/* Ensure titlebar and statusbar don't poke out */
+.compact-titlebar { border-radius: 10px 10px 0 0; }
+.compact-statusbar { border-radius: 0 0 10px 10px; }
+
+/* ─── #8: Compact zone name — generous line-height for descenders ────────── */
+
+.compact-zone-name {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 11px;
+  line-height: 1.6 !important;
+  padding-bottom: 3px !important;
+  overflow: visible !important;
+  display: block;
+}

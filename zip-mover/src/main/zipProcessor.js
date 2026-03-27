@@ -31,6 +31,7 @@ class ZipProcessor {
       filesDeployed: [],
       filesBackedUp: [],
       filesUnmatched: [],
+      filesExcluded: [],
       collisionAlerts: [],
       errors: [],
       status: 'running'
@@ -66,6 +67,16 @@ class ZipProcessor {
 
       for (const { filename, fullPath } of extractedFiles) {
         const tokenizedDest = map.files[filename];
+
+        // ── Excluded file check ───────────────────────────────────────────
+        const excludedFiles = new Set((map.excludedFiles || []).map(f => f.toLowerCase()));
+        if (excludedFiles.has(filename.toLowerCase())) {
+          const excludedDir = path.join(project.projectDir, 'Excluded');
+          await fs.ensureDir(excludedDir);
+          await fs.copy(fullPath, path.join(excludedDir, filename), { overwrite: true });
+          runResult.filesExcluded.push({ filename, reason: 'In excluded files list' });
+          continue;
+        }
 
         if (!tokenizedDest) {
           // ── Unmatched file ────────────────────────────────────────────────

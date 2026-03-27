@@ -47,7 +47,12 @@ function renderZones() {
         <div class="compact-zone-icon">${isProcessing ? '⚙' : '📦'}</div>
         <div class="compact-zone-name">${esc(p.name)}</div>
         <div class="compact-zone-hint">Drop ZIP or file here</div>
-        ${lastRunStatus ? `<div class="compact-last-run ${lastRunStatus}">Run #${lastRun.runNumber}</div>` : ''}
+        ${lastRunStatus ? (() => {
+          const tip = lastRun
+            ? `Run #${lastRun.runNumber} | ${lastRun.status} | ${lastRun.filesDeployed ? lastRun.filesDeployed.length : 0} deployed${lastRun.filesUnmatched && lastRun.filesUnmatched.length ? ' | '+lastRun.filesUnmatched.length+' unmatched' : ''} | ${lastRun.finishedAt ? new Date(lastRun.finishedAt).toLocaleString() : ''}`
+            : '';
+          return `<div class="compact-last-run ${lastRunStatus}" title="${tip.replace(/"/g,'&quot;')}">Run #${lastRun.runNumber}</div>`;
+        })() : ''}
       </div>
     `;
   }).join('');
@@ -92,9 +97,14 @@ async function onDrop(e, el, projectName) {
   const files = Array.from(e.dataTransfer.files);
   if (files.length === 0) return;
 
-  // Process each dropped file
+  // Process each dropped file — use webUtils.getPathForFile for contextIsolation
   for (const file of files) {
-    await processDroppedFile(el, projectName, file.path);
+    const filePath = zm.getPathForFile(file);
+    if (!filePath) {
+      setStatus('Could not resolve file path — try dropping again.', 'error');
+      continue;
+    }
+    await processDroppedFile(el, projectName, filePath);
   }
 }
 
@@ -185,10 +195,7 @@ async function resolveConflict(projectName) {
 // ─── Event bindings ───────────────────────────────────────────────────────────
 function bindEvents() {
   $('btnCloseCompact').addEventListener('click', () => zm.closeCompact());
-  $('btnExpandToFull').addEventListener('click', () => {
-    zm.closeCompact();
-    // Main window will receive compact-closed and come to front
-  });
+  $('btnExpandToFull').addEventListener('click', () => zm.closeCompact());
   $('btnConflictCancel').addEventListener('click', () => {
     $('conflictModal').style.display = 'none';
     pendingConflict = null;

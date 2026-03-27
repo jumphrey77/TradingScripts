@@ -178,7 +178,7 @@ function renderDashboard() {
         ${p.allowDropToUI !== false ? `
         <div class="drop-zone-target" data-project="${escapeHtml(p.name)}" id="dropzone-${escapeHtml(p.name)}">
           <div class="drop-zone-icon">📦</div>
-          <div class="drop-zone-label">Drop ZIP or file here</div>
+          <div class="drop-zone-label">Drop ZIP or single file</div>
           <div class="drop-zone-path">${escapeHtml(p.projectDir || '')}</div>
         </div>` : `
         <div class="drop-zone-disabled">
@@ -286,7 +286,10 @@ function renderRunSummary(projectName, result) {
         <span class="run-status-pill ${statusClass}">${result.status.toUpperCase().replace('_',' ')}</span>
         Run #${result.runNumber} — ${escapeHtml(projectName)} — ${escapeHtml(result.zipName)}
       </div>
-      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted)">${duration} · ${formatDate(result.finishedAt)}</div>
+      <div class="run-summary-datetime">
+        <span class="run-datetime-value">${formatDate(result.finishedAt)}</span>
+        <span class="run-datetime-duration">${duration}</span>
+      </div>
     </div>
     <div class="run-summary-body">${sectionsHtml || '<div style="color:var(--text-muted);font-size:12px;">No files processed.</div>'}</div>
   `;
@@ -388,13 +391,21 @@ function renderProjectDetail(details) {
 
   // ── PROJECT INFO (compact) ─────────────────────────────────────────────────
   const excludedFolders = map.excludedFolders || [];
-  const excludedDisplay = excludedFolders.length > 0
-    ? excludedFolders.map(f => `<span class="exclusion-tag">${escapeHtml(f)}</span>`).join(' ')
+  const excludedFilesList = map.excludedFiles || [];
+  const allExcluded = [
+    ...excludedFolders.map(f => ({ name: f, type: 'folder' })),
+    ...excludedFilesList.map(f => ({ name: f, type: 'file' }))
+  ];
+  const excludedDisplay = allExcluded.length > 0
+    ? allExcluded.map(e => `<span class="exclusion-tag exclusion-tag-${e.type}" title="${e.type === 'file' ? 'Excluded file' : 'Excluded folder'}">${escapeHtml(e.name)}</span>`).join(' ')
     : '<span style="color:var(--text-muted);font-size:11px">None</span>';
 
   const infoHtml = `
     <div class="detail-card">
-      <div class="detail-card-header"><div class="detail-card-title">PROJECT INFO</div></div>
+      <div class="detail-card-header">
+        <div class="detail-card-title">PROJECT INFO</div>
+        <button class="btn-open-root" id="btnOpenProjectFolder" style="font-size:11px;padding:4px 10px">📂 Open Folder</button>
+      </div>
       <div class="detail-card-body" style="padding:10px 16px">
         <table class="info-table">
           <tr><td>Destination</td><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px" title="${escapeHtml(map.destinationRoot || '')}">${escapeHtml(map.destinationRoot || '—')}</td></tr>
@@ -420,9 +431,11 @@ function renderProjectDetail(details) {
     <div class="detail-card">
       <div class="detail-card-header">
         <div class="detail-card-title">RUN HISTORY</div>
-        <div style="display:flex;gap:6px">
-          ${runLog.length > 0 ? '<button class="btn-secondary" style="font-size:11px;padding:4px 10px" id="btnViewLog">📋 View Log</button>' : ''}
-          ${runLog.length > 0 ? '<button class="btn-danger-sm" style="font-size:11px;padding:4px 10px" id="btnClearLog">🗑 Clear</button>' : ''}
+        <div style="display:flex;gap:6px;align-items:center">
+          <span id="zipArchiveCount" style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted)"></span>
+          <button class="btn-secondary" style="font-size:11px;padding:4px 8px" id="btnClearArchive" title="Delete all archived zips">🗜 Archive</button>
+          ${runLog.length > 0 ? '<button class="btn-secondary" style="font-size:11px;padding:4px 8px" id="btnViewLog">📋 Log</button>' : ''}
+          ${runLog.length > 0 ? '<button class="btn-danger-sm" style="font-size:11px;padding:4px 8px" id="btnClearLog">🗑</button>' : ''}
         </div>
       </div>
       <div class="detail-card-body" style="padding:0">
@@ -434,10 +447,10 @@ function renderProjectDetail(details) {
                 ${runLog.map(r => `
                   <tr>
                     <td>#${r.runNumber}</td>
-                    <td title="${escapeHtml(r.zipName)}">${escapeHtml(r.zipName.length > 18 ? r.zipName.substring(0,18)+'…' : r.zipName)}</td>
+                    <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(r.zipName)}">${escapeHtml(r.zipName)}</td>
                     <td><span class="run-status-pill ${r.status}">${r.status.replace(/_/g,' ')}</span></td>
                     <td>${r.filesDeployed.length}↑${r.filesUnmatched.length ? ' '+r.filesUnmatched.length+'?' : ''}${r.errors.length ? ' '+r.errors.length+'✗' : ''}</td>
-                    <td style="white-space:nowrap">${formatDate(r.finishedAt)}</td>
+                    <td style="white-space:nowrap;text-align:right">${formatDate(r.finishedAt)}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -457,6 +470,27 @@ function renderProjectDetail(details) {
           <code style="color:var(--accent);background:var(--bg-base);padding:1px 5px;border-radius:3px">NewFilesDetected/</code>.
           Click a map entry to assign its destination.
         </div>
+      </div>
+    </div>
+  `;
+
+  // ── EXCLUDED FILES ─────────────────────────────────────────────────────────
+  const excludedFiles = map.excludedFiles || [];
+  const excludedFilesHtml = `
+    <div class="detail-card">
+      <div class="detail-card-header">
+        <div class="detail-card-title">EXCLUDED FILES</div>
+        <button class="btn-edit-exclusions" id="btnAddExcludedFile">+ Add</button>
+      </div>
+      <div class="detail-card-body">
+        ${excludedFiles.length === 0
+          ? '<div style="color:var(--text-muted);font-size:12px">No files excluded. Click + Add to exclude files like <code style=\'color:var(--accent);\'>.gitignore</code> from deployment.</div>'
+          : excludedFiles.map(f => `
+              <div class="excluded-file-row">
+                <span class="excluded-file-name">${escapeHtml(f)}</span>
+                <button class="btn-remove-excluded" data-file="${escapeHtml(f)}">✕</button>
+              </div>`).join('')
+        }
       </div>
     </div>
   `;
@@ -515,6 +549,7 @@ function renderProjectDetail(details) {
 
   // ── Bind buttons ──────────────────────────────────────────────────────────
   $('btnEditExclusions').addEventListener('click', () => openExclusionsModal(details.name));
+  on('btnOpenProjectFolder', 'click', () => zm.openProjectFolder(details.name));
   $('btnRebuildMapDetail').addEventListener('click', () => rebuildMap(details.name));
 
   const btnViewLog = $('btnViewLog');
@@ -523,12 +558,31 @@ function renderProjectDetail(details) {
   const btnClearLog = $('btnClearLog');
   if (btnClearLog) {
     btnClearLog.addEventListener('click', async () => {
-      if (!confirm(`Clear all run history for "${details.name}"? This cannot be undone.`)) return;
+      if (!confirm('Clear all run history for "' + details.name + '"? This cannot be undone.')) return;
       const res = await zm.clearRunLog(details.name);
       if (res.success) openProject(details.name);
       else alert('Failed: ' + res.error);
     });
   }
+
+  // Zip archive count + clear
+  zm.getZipArchiveCount(details.name).then(r => {
+    const el = $('zipArchiveCount');
+    if (el && r.success) el.textContent = r.count + ' archived';
+  });
+  const btnClearArchive = $('btnClearArchive');
+  if (btnClearArchive) {
+    btnClearArchive.addEventListener('click', async () => {
+      const countRes = await zm.getZipArchiveCount(details.name);
+      const count = countRes.success ? countRes.count : '?';
+      if (!confirm('Delete all ' + count + ' archived zip files for "' + details.name + '"?')) return;
+      const res = await zm.clearZipArchive(details.name);
+      if (res.success) { alert('Deleted ' + res.count + ' zip file(s).'); openProject(details.name); }
+      else alert('Failed: ' + res.error);
+    });
+  }
+
+
 
   // ── Map search filter — works on live DOM including async-loaded entries ──
   $('mapSearch').addEventListener('input', e => {
@@ -541,15 +595,17 @@ function renderProjectDetail(details) {
     if (!mapContainer) return;
     const filesWithSizes = res.success ? (res.map.filesWithSizes || {}) : {};
 
+    const excludedFilesSet = new Set((map.excludedFiles || []).map(f => f.toLowerCase()));
     const entriesHtml = fileEntries.map(([filename, dest]) => {
       const info = filesWithSizes[filename] || {};
-      const size = info.size != null
+      const isExcluded = excludedFilesSet.has(filename.toLowerCase());
+      const size = isExcluded ? '—' : (info.size != null
         ? (info.size < 1024 ? info.size+'B' : info.size < 1048576 ? (info.size/1024).toFixed(1)+'KB' : (info.size/1048576).toFixed(2)+'MB')
-        : '—';
+        : '—');
       return `
-        <div class="map-entry" data-filename="${escapeHtml(filename)}" data-dest="${escapeHtml(dest)}">
+        <div class="map-entry ${isExcluded ? 'map-entry-excluded' : ''}" data-filename="${escapeHtml(filename)}" data-dest="${escapeHtml(dest)}">
           <div class="map-col-name map-entry-name">${escapeHtml(filename)}${collisions.includes(filename) ? ' <span class="map-collision-tag">!</span>' : ''}</div>
-          <div class="map-col-dest map-entry-dest">${escapeHtml(dest)}</div>
+          <div class="map-col-dest map-entry-dest ${isExcluded ? 'excluded-path' : ''}">${isExcluded ? 'excluded' : escapeHtml(dest)}</div>
           <div class="map-col-size">${size}</div>
         </div>
       `;
@@ -762,6 +818,18 @@ async function openExclusionsModal(projectName) {
   const project = state.projects.find(p => p.name === projectName);
   if (!project) return;
 
+  // Pre-fill excluded files from the live map (not the project summary)
+  // Use currentProjectDetails if available, otherwise fetch fresh
+  let currentExcludedFiles = [];
+  if (state.currentProjectDetails && state.currentProjectDetails.name === projectName) {
+    currentExcludedFiles = (state.currentProjectDetails.map && state.currentProjectDetails.map.excludedFiles) || [];
+  } else {
+    const mapRes = await zm.getProjectMap(projectName);
+    currentExcludedFiles = (mapRes.success && mapRes.map && mapRes.map.excludedFiles) || [];
+  }
+  const filesField = $('inputExcludedFiles');
+  if (filesField) filesField.value = currentExcludedFiles.join(', ');
+
   exclusionFolderData = [];
   $('exclusionChecklist').style.display = 'none';
   $('exclusionChecklistLoading').style.display = 'flex';
@@ -777,14 +845,12 @@ async function openExclusionsModal(projectName) {
     return;
   }
 
-  const currentExcluded = new Set((project.excludedFolders || []).map(f => f.toLowerCase()));
-
+  const currentExcludedFolders = new Set((project.excludedFolders || []).map(f => f.toLowerCase()));
   exclusionFolderData = foldersRes.folders.map(name => ({
     name,
-    excluded: currentExcluded.has(name.toLowerCase())
+    excluded: currentExcludedFolders.has(name.toLowerCase())
   }));
 
-  // Render checklist — checked = included (not excluded)
   const container = $('exclusionChecklist');
   if (exclusionFolderData.length === 0) {
     container.innerHTML = '<div class="folder-checklist-empty">No subfolders found.</div>';
@@ -796,27 +862,35 @@ async function openExclusionsModal(projectName) {
       </label>
     `).join('');
   }
-
   container.style.display = 'flex';
 }
 
 async function saveExclusions() {
   if (!exclusionProjectName) return;
 
-  // Collect excluded = unchecked
-  const newExcluded = [];
+  // Collect excluded folders = unchecked
+  const newExcludedFolders = [];
   $('exclusionChecklist').querySelectorAll('input[type="checkbox"]').forEach((cb, i) => {
-    if (!cb.checked) newExcluded.push(exclusionFolderData[i].name);
+    if (!cb.checked) newExcludedFolders.push(exclusionFolderData[i].name);
   });
 
-  const includedCount = exclusionFolderData.length - newExcluded.length;
+  // Collect excluded files from comma-separated input
+  const filesRaw = ($('inputExcludedFiles') || {}).value || '';
+  const newExcludedFiles = filesRaw.split(',')
+    .map(f => f.trim()).filter(f => f.length > 0);
 
-  if (!confirm(`Rebuilding will re-scan ${includedCount} folder${includedCount !== 1 ? 's' : ''}. Continue?`)) return;
+  const includedCount = exclusionFolderData.length - newExcludedFolders.length;
+  // Confirm BEFORE hiding the modal so it stays open if user cancels
+  if (!confirm('Rebuilding will re-scan ' + includedCount + ' folder' + (includedCount !== 1 ? 's' : '') + '. Continue?')) return;
 
   $('modalExclusions').style.display = 'none';
   showLoading('Updating exclusions and rebuilding map…');
 
-  const res = await zm.updateExclusions(exclusionProjectName, newExcluded);
+  // Save excluded files first (no rebuild needed for files)
+  await zm.updateProjectSettings(exclusionProjectName, { excludedFiles: newExcludedFiles });
+
+  // Then rebuild with new folder exclusions
+  const res = await zm.updateExclusions(exclusionProjectName, newExcludedFolders);
   hideLoading();
 
   if (!res.success) {
@@ -828,7 +902,7 @@ async function saveExclusions() {
   applyState(stateRes);
 
   if (state.currentProject === exclusionProjectName) {
-    openProject(exclusionProjectName);
+    await openProject(exclusionProjectName);  // refreshes state.currentProjectDetails
   }
 }
 
@@ -973,8 +1047,9 @@ function applyState(newState) {
   state.config = newState.config || {};
   state.watcherStatus = newState.watcherStatus || {};
   if (newState.appVersion) {
-    const vEl = document.querySelector('.version-tag');
-    if (vEl) vEl.textContent = 'v' + newState.appVersion;
+    document.querySelectorAll('.version-tag').forEach(el => {
+      el.textContent = 'v' + newState.appVersion;
+    });
   }
   renderSidebar();
   renderDashboard();
@@ -1076,7 +1151,14 @@ async function handleDashboardDrop(e, el, projectName) {
     el.classList.add('drop-processing');
     showAlert('alert-info', `📦 Processing — ${projectName}`, `Deploying <strong>${escapeHtml(file.name)}</strong>…`, false);
 
-    const res = await zm.handleDrop(projectName, file.path);
+    // Use webUtils.getPathForFile — the correct API for contextIsolation mode
+    const filePath = zm.getPathForFile(file);
+    if (!filePath) {
+      el.classList.remove('drop-processing');
+      showAlert('alert-danger', 'Drop Failed', 'Could not resolve file path. Try dropping again.', true);
+      continue;
+    }
+    const res = await zm.handleDrop(projectName, filePath);
     el.classList.remove('drop-processing');
 
     if (!res.success) {

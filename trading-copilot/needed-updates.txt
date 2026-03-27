@@ -1,23 +1,32 @@
 -------------------------------------------
 TRADING CO-PILOT
 -------------------------------------------
+1.  Need to be able to add entry manuall    
+    a.  [TICKER][QTY][PRICE]
+    b.  Have a Summary Of all Positions (avg if multipl BUYS)
+    c.  These can be Manual Enter, or extract for Alpaca
+BUGS 
+- Trade Tab SAys "switch to In-Trade Mode"
+
+
 
 NEW DIRECTION
 
 1.  Looking at Moving from trading Stocks to Crypto
 2.  Reasons
-    a.  Difficult to DayTrade Stocks - 
+    a.  Difficult to DayTrade Stocks 
         1)  Requires constant attention
-        2)  No Alerts are 100% - Alway need
+        2)  Alerts are not 100% - Alway need input.
     b.  I have a TradingView Pine Script with a Strategy I want to test
 3.  High Level Steps
-    a.  Create a Pine Script in TradingView
+    a.  Create a Pine Script in TradingView - DONE
     b.  Incorporate "Alerts" to Auto Trade thru a WebHook Call (need to develop listener)
     c.  I want to test the TV Strategy thru Paper Trading and Alpaca
     d.  I want to use existing Tools we have developed to assist
-        1)  Trading CoPilot - Monitor 
+        0)  Level 1 - Trading View Raises Alerts (Always Firing)
+        1)  Level 2 - Trading CoPilot - Monitor (Strategies) 
         2)  News Scanner - Scan News Specific to Crypto
-        3)  Trade is dollars (ie $200 BTC )not units (20 BTC)
+        3)  Trade in dollars (ie $200 BTC )not units (20 BTC)
 4.  Need Idea for the Web-WebHook
     a.  Develop locally / Use a paid service
     b.  Timing is obviously critical
@@ -83,30 +92,6 @@ x.  Web Hook Design Considerations
             1)  Sell All
             2)  Tiered Exit
 
-REVIEW OF MESSAGE FILE
-1.  Please review this file to ensure it is accurate to date.
-2.  Assumptions
-    a.  Our Alerts are not hardcoded, but use Alerts
-2.  Pleaceholders
-    a.  Are all the Placeholders and data availabile thru the App [PREMV][PREMP]
-    b.  What Placeholders to we need to Add (SMA20)(SMA200)
-    c.  Mark any inactive, or not available yet, with (TBD)
-3.  Key Feature Upgrades
-    a.  Add a schema to the file for validty
-    b.  Add Major Section for Strategie (see Below)
-    c.  Add Major Section called "Variables" that define all the "variables" used in Alerts 
-        (similar to Message placeholders), or use the same place Section.  Example: RSI_1M, VOLUME_RATIO
-    c.  Add Enums when appropriate
-    d.  Create and Editor that Allows the update of
-        a)  Messsages
-        b)  Alerts
-        c)  Enums
-        d)  Strategies - Which Rules apply to Which Strategy
-4.  Strategies
-    a. Currently We have "all", "scalp". Would like to create a Major Section that Defines the Strategies
-3.  Updates to this file
-    a.  If I can edit this locally, we need to ensure we handle updates (from you) so my changes dont get 
-        overwritten.  Merge Utility?
 
 
 

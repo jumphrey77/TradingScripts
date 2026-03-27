@@ -1,0 +1,373 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "claude_messages.schema.json",
+  "title": "Trading Copilot Messages & Alerts Schema",
+  "description": "Validates the structure of claude_messages.json",
+  "type": "object",
+  "required": [
+    "version",
+    "placeholders",
+    "variables",
+    "messages",
+    "alerts",
+    "strategies",
+    "settings"
+  ],
+  "additionalProperties": false,
+  "definitions": {
+    "severity": {
+      "type": "string",
+      "enum": [
+        "info",
+        "warning",
+        "danger",
+        "success"
+      ],
+      "description": "Alert severity level"
+    },
+    "strategyRef": {
+      "type": "string",
+      "enum": [
+        "all",
+        "regular",
+        "scalp",
+        "momentum",
+        "reversal",
+        "breakout"
+      ],
+      "description": "Which trading strategy this applies to"
+    },
+    "operator": {
+      "type": "string",
+      "enum": [
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+        "eq",
+        "neq",
+        "crosses_above",
+        "crosses_below"
+      ],
+      "description": "Comparison operator for strategy rules"
+    },
+    "placeholder": {
+      "type": "object",
+      "required": [
+        "key",
+        "description",
+        "source",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^\\[[A-Z0-9_]+\\]$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "tbd",
+            "future"
+          ],
+          "description": "active=working, tbd=needs implementation, future=planned"
+        },
+        "example": {
+          "type": "string"
+        }
+      }
+    },
+    "variable": {
+      "type": "object",
+      "required": [
+        "id",
+        "label",
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "description": "state.field path or 'computed'"
+        },
+        "description": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        }
+      }
+    },
+    "message": {
+      "type": "object",
+      "required": [
+        "id",
+        "category",
+        "description",
+        "strategy",
+        "template"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^msg_[a-z0-9_]+$"
+        },
+        "label": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "research",
+            "intrade",
+            "exit",
+            "analysis",
+            "custom"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "strategy": {
+          "$ref": "#/definitions/strategyRef"
+        },
+        "mode": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "research",
+              "intrade",
+              "exit",
+              "all"
+            ]
+          }
+        },
+        "builtIn": {
+          "type": "boolean"
+        },
+        "template": {
+          "type": "string",
+          "minLength": 10
+        },
+        "favorite": {
+          "type": "boolean"
+        },
+        "buttonText": {
+          "type": "string"
+        },
+        "buttonStyle": {
+          "type": "string",
+          "enum": [
+            "info",
+            "warning",
+            "danger",
+            "success",
+            "blue",
+            ""
+          ]
+        }
+      }
+    },
+    "alert": {
+      "type": "object",
+      "required": [
+        "id",
+        "condition",
+        "severity",
+        "label",
+        "description",
+        "strategy",
+        "template"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^alert_[a-z0-9_]+$"
+        },
+        "condition": {
+          "type": "string",
+          "description": "Human-readable trigger condition"
+        },
+        "severity": {
+          "$ref": "#/definitions/severity"
+        },
+        "label": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "message_id": {
+          "type": "string",
+          "pattern": "^msg_[a-z0-9_]+$"
+        },
+        "strategy": {
+          "$ref": "#/definitions/strategyRef"
+        },
+        "autoSend": {
+          "type": "boolean"
+        },
+        "template": {
+          "type": "string",
+          "minLength": 10
+        },
+        "sentiment": {
+          "type": "string",
+          "enum": [
+            "bullish",
+            "bearish",
+            "neutral"
+          ],
+          "description": "Alert bias for dot color in UI"
+        },
+        "cooldownSeconds": {
+          "type": "number",
+          "description": "Override default cooldown for this alert"
+        }
+      }
+    },
+    "strategyRule": {
+      "type": "object",
+      "required": [
+        "variable",
+        "operator",
+        "value"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "variable": {
+          "type": "string",
+          "description": "Variable ID from variables section"
+        },
+        "operator": {
+          "$ref": "#/definitions/operator"
+        },
+        "value": {},
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "strategy": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "rules"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^strat_[a-z0-9_]+$"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "builtIn": {
+          "type": "boolean"
+        },
+        "requireAll": {
+          "type": "boolean",
+          "description": "true=AND all rules, false=OR any rule"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/strategyRule"
+          },
+          "minItems": 1
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "placeholders": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/placeholder"
+      }
+    },
+    "variables": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/variable"
+      }
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/message"
+      }
+    },
+    "alerts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/alert"
+      }
+    },
+    "strategies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/strategy"
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "autoSendEnabled": {
+          "type": "boolean"
+        },
+        "autoSendDelay": {
+          "type": "number"
+        },
+        "defaultStrategy": {
+          "type": "string"
+        },
+        "defaultMode": {
+          "type": "string"
+        },
+        "alertCooldownSeconds": {
+          "type": "number"
+        },
+        "maxAlertsVisible": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

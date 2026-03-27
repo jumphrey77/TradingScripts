@@ -7,7 +7,8 @@ const fs = require('fs-extra');
 const PROJECT_SUBDIRS = [
   'FileBackups',
   'ZipArchive',
-  'NewFilesDetected'
+  'NewFilesDetected',
+  'Excluded'
 ];
 
 class ProjectManager {
@@ -48,7 +49,8 @@ class ProjectManager {
         nextRunNumber: map.nextRunNumber || 1,
         fileCount: Object.keys(map.files || {}).length,
         excludedFolders: map.excludedFolders || [],
-        allowDropToUI: map.allowDropToUI !== false,  // default true
+        excludedFiles: map.excludedFiles || [],
+        allowDropToUI: map.allowDropToUI !== false,
         lastRun: await this._getLastRun(name)
       };
     } catch (err) {
@@ -146,6 +148,7 @@ class ProjectManager {
       nextRunNumber: 1,
       fileCount: Object.keys(map.files).length,
       excludedFolders: map.excludedFolders,
+      excludedFiles: [],
       allowDropToUI: true,
       lastRun: null
     };
@@ -182,7 +185,7 @@ class ProjectManager {
     const project = this.projects[name];
     if (!map) throw new Error(`Project "${name}" not found`);
     // Merge allowed settings keys
-    const allowed = ['allowDropToUI'];
+    const allowed = ['allowDropToUI', 'excludedFiles'];
     for (const key of allowed) {
       if (settings[key] !== undefined) {
         map[key] = settings[key];
@@ -240,6 +243,8 @@ class ProjectManager {
     const map = {
       destinationRoot,
       excludedFolders,                                          // ← persisted
+      excludedFiles: (this.maps[name] && this.maps[name].excludedFiles) || [],  // ← persisted across rebuilds
+      allowDropToUI: this.maps[name] ? (this.maps[name].allowDropToUI !== false) : true,
       nextRunNumber: (this.maps[name] && this.maps[name].nextRunNumber) || 1,
       builtAt: new Date().toISOString(),
       fileCount: Object.keys(files).length,

@@ -45,6 +45,9 @@ async function initializeApp() {
 
     compactWindowManager = new CompactWindowManager(configManager, (evt) => {
       sendToMain('compact-event', evt);
+      if (evt.type === 'compact-closed') {
+        if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
+      }
     });
 
     if (!configManager.needsSetup()) {
@@ -139,11 +142,13 @@ ipcMain.handle('change-app-root', async (event, { folderPath }) => {
 
 ipcMain.handle('open-compact', async () => {
   compactWindowManager.open();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
   return { success: true };
 });
 
 ipcMain.handle('close-compact', async () => {
   compactWindowManager.close();
+  if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
   return { success: true };
 });
 
@@ -190,6 +195,27 @@ ipcMain.handle('open-project-folder', async (event, { name }) => {
 ipcMain.handle('open-root-folder', async () => {
   try { await shell.openPath(configManager.getAppRoot()); return { success: true }; }
   catch (err) { return { success: false, error: err.message }; }
+});
+
+ipcMain.handle('clear-zip-archive', async (event, { name }) => {
+  try {
+    const p = projectManager.getAllProjects().find(p => p.name === name);
+    if (!p) throw new Error('Project not found');
+    const archiveDir = require('path').join(p.projectDir, 'ZipArchive');
+    const files = await fs.readdir(archiveDir).catch(() => []);
+    for (const f of files) await fs.remove(require('path').join(archiveDir, f));
+    return { success: true, count: files.length };
+  } catch (err) { return { success: false, error: err.message }; }
+});
+
+ipcMain.handle('get-zip-archive-count', async (event, { name }) => {
+  try {
+    const p = projectManager.getAllProjects().find(p => p.name === name);
+    if (!p) return { success: true, count: 0 };
+    const archiveDir = require('path').join(p.projectDir, 'ZipArchive');
+    const files = await fs.readdir(archiveDir).catch(() => []);
+    return { success: true, count: files.filter(f => f.endsWith('.zip')).length };
+  } catch (err) { return { success: false, error: err.message }; }
 });
 
 ipcMain.handle('clear-run-log', async (event, { name }) => {

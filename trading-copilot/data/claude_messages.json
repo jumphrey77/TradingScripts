@@ -1,30 +1,517 @@
 {
-  "placeholders": {
-    "[T]": "Ticker symbol (e.g. LNAI)",
-    "[P]": "Current price (e.g. $0.714)",
-    "[E]": "Entry price (e.g. $0.670)",
-    "[S]": "Current stop loss (e.g. $0.650)",
-    "[TG1]": "Target 1 (e.g. $0.780)",
-    "[TG2]": "Target 2 (e.g. $0.850)",
-    "[PNL]": "Current P&L (e.g. +$44 / +6.6%)",
-    "[TIME]": "Time in trade (e.g. 4m 32s)",
-    "[RSI]": "Current RSI 1m (e.g. 67.4)",
-    "[MACD]": "Current MACD (e.g. +0.008)",
-    "[VWAP]": "Current VWAP (e.g. $0.682)",
-    "[VOL]": "Volume vs average (e.g. 2.3x avg)",
-    "[SPREAD]": "Current bid/ask spread (e.g. $0.004 / 0.6%)",
-    "[TAPE]": "Tape direction and speed (e.g. Green / Fast)",
-    "[STRAT]": "Selected strategy (Regular or Scalp)",
-    "[MODE]": "Current mode (Research / In-Trade / Exit Plan)",
-    "[TIME_ET]": "Current Eastern time (e.g. 9:32:14 AM ET)",
-    "[BID]": "Current bid price",
-    "[ASK]": "Current ask price",
-    "[HIGH]": "Intraday high",
-    "[LOW]": "Intraday low",
-    "[FLOAT]": "Stock float if available",
-    "[PREMP]": "Pre-market price",
-    "[PREMV]": "Pre-market volume"
+  "$schema": "./schema/claude_messages.schema.json",
+  "version": "2.0",
+  "placeholders": [
+    {
+      "key": "[T]",
+      "description": "Ticker symbol",
+      "source": "state.ticker",
+      "status": "active",
+      "example": "RMSG"
+    },
+    {
+      "key": "[P]",
+      "description": "Current price",
+      "source": "state.price",
+      "status": "active",
+      "example": "$0.714"
+    },
+    {
+      "key": "[BID]",
+      "description": "Current bid price",
+      "source": "state.bid",
+      "status": "active",
+      "example": "$0.712"
+    },
+    {
+      "key": "[ASK]",
+      "description": "Current ask price",
+      "source": "state.ask",
+      "status": "active",
+      "example": "$0.716"
+    },
+    {
+      "key": "[SPREAD]",
+      "description": "Bid/ask spread with %",
+      "source": "state.spread",
+      "status": "active",
+      "example": "$0.004 (0.6%)"
+    },
+    {
+      "key": "[VWAP]",
+      "description": "Session VWAP from Alpaca dailyBar.vw",
+      "source": "state.vwap",
+      "status": "active",
+      "example": "$0.742"
+    },
+    {
+      "key": "[RSI]",
+      "description": "RSI 14 on 1m bars (Wilders smoothed)",
+      "source": "state.rsi",
+      "status": "active",
+      "example": "58.4"
+    },
+    {
+      "key": "[RSI5]",
+      "description": "RSI 14 on 5m bars",
+      "source": "state.rsi5m",
+      "status": "active",
+      "example": "55.2"
+    },
+    {
+      "key": "[RSI15]",
+      "description": "RSI 14 on 15m bars",
+      "source": "state.rsi15m",
+      "status": "active",
+      "example": "44.8"
+    },
+    {
+      "key": "[MACD]",
+      "description": "MACD line (EMA12 - EMA26)",
+      "source": "state.macd",
+      "status": "active",
+      "example": "-0.0245"
+    },
+    {
+      "key": "[MACDH]",
+      "description": "MACD histogram (MACD line - signal line)",
+      "source": "state.macdHist",
+      "status": "active",
+      "example": "-0.0032"
+    },
+    {
+      "key": "[EMA20]",
+      "description": "EMA 20 from 1m bars",
+      "source": "state.ema20",
+      "status": "active",
+      "example": "$0.731"
+    },
+    {
+      "key": "[EMA50]",
+      "description": "EMA 50 from 1m bars",
+      "source": "state.ema50",
+      "status": "active",
+      "example": "$0.748"
+    },
+    {
+      "key": "[SMA20]",
+      "description": "SMA 20 from 1m bars",
+      "source": "state.sma20",
+      "status": "active",
+      "example": "$0.732"
+    },
+    {
+      "key": "[VOL]",
+      "description": "Volume vs average ratio",
+      "source": "state.volRatio",
+      "status": "active",
+      "example": "2.3x avg"
+    },
+    {
+      "key": "[VOLRAW]",
+      "description": "Actual share volume this bar",
+      "source": "state.volCurrent",
+      "status": "active",
+      "example": "139,450 shares"
+    },
+    {
+      "key": "[TAPE]",
+      "description": "Tape direction (Green/Red)",
+      "source": "state.tape",
+      "status": "active",
+      "example": "Green"
+    },
+    {
+      "key": "[HIGH]",
+      "description": "Session high from dailyBar",
+      "source": "state.sessionHigh",
+      "status": "active",
+      "example": "$0.856"
+    },
+    {
+      "key": "[LOW]",
+      "description": "Session low from dailyBar",
+      "source": "state.sessionLow",
+      "status": "active",
+      "example": "$0.487"
+    },
+    {
+      "key": "[STRAT]",
+      "description": "Selected strategy name",
+      "source": "state.strategy",
+      "status": "active",
+      "example": "Regular"
+    },
+    {
+      "key": "[MODE]",
+      "description": "Current app mode",
+      "source": "state.mode",
+      "status": "active",
+      "example": "Research"
+    },
+    {
+      "key": "[TIME_ET]",
+      "description": "Current Eastern time",
+      "source": "Date (computed)",
+      "status": "active",
+      "example": "9:32:14 AM ET"
+    },
+    {
+      "key": "[E]",
+      "description": "Entry price - requires open position",
+      "source": "state.entry (TBD)",
+      "status": "tbd",
+      "example": "$0.670"
+    },
+    {
+      "key": "[S]",
+      "description": "Stop loss - requires trade context",
+      "source": "state.stop (TBD)",
+      "status": "tbd",
+      "example": "$0.650"
+    },
+    {
+      "key": "[TG1]",
+      "description": "Target 1 - requires trade context",
+      "source": "state.target1 (TBD)",
+      "status": "tbd",
+      "example": "$0.780"
+    },
+    {
+      "key": "[TG2]",
+      "description": "Target 2 - requires trade context",
+      "source": "state.target2 (TBD)",
+      "status": "tbd",
+      "example": "$0.850"
+    },
+    {
+      "key": "[PNL]",
+      "description": "P&L - requires open Alpaca position",
+      "source": "Alpaca position (TBD)",
+      "status": "tbd",
+      "example": "+$44 / +6.6%"
+    },
+    {
+      "key": "[TIME]",
+      "description": "Time in trade - requires entry time",
+      "source": "state.entryTime (TBD)",
+      "status": "tbd",
+      "example": "4m 32s"
+    },
+    {
+      "key": "[FLOAT]",
+      "description": "Float - user must enter manually",
+      "source": "user input (TBD)",
+      "status": "tbd",
+      "example": "2.5M"
+    },
+    {
+      "key": "[PREMP]",
+      "description": "Pre-market price",
+      "source": "not implemented",
+      "status": "tbd",
+      "example": "$0.72"
+    },
+    {
+      "key": "[PREMV]",
+      "description": "Pre-market volume",
+      "source": "not implemented",
+      "status": "tbd",
+      "example": "450K"
+    },
+    {
+      "key": "[SMA200]",
+      "description": "SMA 200 - needs daily bar fetch",
+      "source": "not implemented",
+      "status": "future",
+      "example": "$0.55"
+    },
+    {
+      "key": "[BALANCE]",
+      "description": "Account buying power from Alpaca",
+      "source": "GET /v2/account",
+      "status": "future",
+      "example": "$2,450.00"
+    }
+  ],
+  "variables": {
+    "RSI_1M": {
+      "id": "RSI_1M",
+      "label": "RSI 1m",
+      "source": "state.rsi",
+      "unit": "0-100"
+    },
+    "RSI_5M": {
+      "id": "RSI_5M",
+      "label": "RSI 5m",
+      "source": "state.rsi5m",
+      "unit": "0-100"
+    },
+    "RSI_15M": {
+      "id": "RSI_15M",
+      "label": "RSI 15m",
+      "source": "state.rsi15m",
+      "unit": "0-100"
+    },
+    "MACD_LINE": {
+      "id": "MACD_LINE",
+      "label": "MACD Line",
+      "source": "state.macd",
+      "unit": "price delta"
+    },
+    "MACD_HIST": {
+      "id": "MACD_HIST",
+      "label": "MACD Histogram",
+      "source": "state.macdHist",
+      "unit": "price delta"
+    },
+    "VWAP": {
+      "id": "VWAP",
+      "label": "VWAP",
+      "source": "state.vwap",
+      "unit": "price"
+    },
+    "PRICE": {
+      "id": "PRICE",
+      "label": "Current Price",
+      "source": "state.price",
+      "unit": "price"
+    },
+    "EMA20": {
+      "id": "EMA20",
+      "label": "EMA 20 (1m)",
+      "source": "state.ema20",
+      "unit": "price"
+    },
+    "EMA50": {
+      "id": "EMA50",
+      "label": "EMA 50 (1m)",
+      "source": "state.ema50",
+      "unit": "price"
+    },
+    "SMA20": {
+      "id": "SMA20",
+      "label": "SMA 20 (1m)",
+      "source": "state.sma20",
+      "unit": "price"
+    },
+    "VOLUME_RATIO": {
+      "id": "VOLUME_RATIO",
+      "label": "Volume vs Avg",
+      "source": "state.volRatio",
+      "unit": "multiplier"
+    },
+    "SPREAD_PCT": {
+      "id": "SPREAD_PCT",
+      "label": "Spread %",
+      "source": "state.spreadPct",
+      "unit": "percent"
+    },
+    "TAPE": {
+      "id": "TAPE",
+      "label": "Tape Direction",
+      "source": "state.tape",
+      "unit": "enum: Green|Red"
+    },
+    "VWAP_POS": {
+      "id": "VWAP_POS",
+      "label": "Price vs VWAP",
+      "source": "computed: price>vwap",
+      "unit": "enum: above|below"
+    }
   },
+  "strategies": [
+    {
+      "id": "strat_momentum",
+      "name": "Momentum Entry",
+      "description": "Strong trend with volume confirmation and bullish tape. All conditions must be green.",
+      "builtIn": true,
+      "requireAll": true,
+      "tags": [
+        "entry",
+        "trend",
+        "volume"
+      ],
+      "rules": [
+        {
+          "variable": "TAPE",
+          "operator": "eq",
+          "value": "Green",
+          "description": "Tape must be green"
+        },
+        {
+          "variable": "MACD_HIST",
+          "operator": "gt",
+          "value": 0,
+          "description": "MACD histogram positive"
+        },
+        {
+          "variable": "RSI_1M",
+          "operator": "gt",
+          "value": 50,
+          "description": "RSI above 50"
+        },
+        {
+          "variable": "VOLUME_RATIO",
+          "operator": "gte",
+          "value": 1.5,
+          "description": "Volume 1.5x+ average"
+        },
+        {
+          "variable": "VWAP_POS",
+          "operator": "eq",
+          "value": "above",
+          "description": "Price above VWAP"
+        }
+      ]
+    },
+    {
+      "id": "strat_vwap_reclaim",
+      "name": "VWAP Reclaim",
+      "description": "Price reclaiming VWAP after trading below. Looking for hold confirmation.",
+      "builtIn": true,
+      "requireAll": true,
+      "tags": [
+        "entry",
+        "vwap",
+        "reversal"
+      ],
+      "rules": [
+        {
+          "variable": "VWAP_POS",
+          "operator": "eq",
+          "value": "above",
+          "description": "Price just crossed above VWAP"
+        },
+        {
+          "variable": "RSI_1M",
+          "operator": "gt",
+          "value": 40,
+          "description": "RSI recovering"
+        },
+        {
+          "variable": "VOLUME_RATIO",
+          "operator": "gte",
+          "value": 1.2,
+          "description": "Volume confirming"
+        },
+        {
+          "variable": "TAPE",
+          "operator": "eq",
+          "value": "Green",
+          "description": "Tape supporting"
+        }
+      ]
+    },
+    {
+      "id": "strat_oversold_bounce",
+      "name": "Oversold Bounce",
+      "description": "Reversal from oversold conditions with volume spike. High risk/reward.",
+      "builtIn": true,
+      "requireAll": true,
+      "tags": [
+        "reversal",
+        "rsi",
+        "bounce"
+      ],
+      "rules": [
+        {
+          "variable": "RSI_1M",
+          "operator": "lte",
+          "value": 35,
+          "description": "RSI deeply oversold"
+        },
+        {
+          "variable": "VOLUME_RATIO",
+          "operator": "gte",
+          "value": 2.0,
+          "description": "Volume spike on selloff"
+        },
+        {
+          "variable": "SPREAD_PCT",
+          "operator": "lt",
+          "value": 1.5,
+          "description": "Spread tradeable"
+        }
+      ]
+    },
+    {
+      "id": "strat_hod_breakout",
+      "name": "HOD Breakout",
+      "description": "Price closing above high of day on volume. Blue sky territory.",
+      "builtIn": true,
+      "requireAll": true,
+      "tags": [
+        "breakout",
+        "hod",
+        "momentum"
+      ],
+      "rules": [
+        {
+          "variable": "VOLUME_RATIO",
+          "operator": "gte",
+          "value": 1.5,
+          "description": "Volume confirming breakout"
+        },
+        {
+          "variable": "RSI_1M",
+          "operator": "gt",
+          "value": 50,
+          "description": "RSI bullish"
+        },
+        {
+          "variable": "MACD_HIST",
+          "operator": "gt",
+          "value": 0,
+          "description": "MACD positive"
+        },
+        {
+          "variable": "TAPE",
+          "operator": "eq",
+          "value": "Green",
+          "description": "Tape supporting"
+        }
+      ]
+    },
+    {
+      "id": "strat_scalp_tight",
+      "name": "Scalp - Tight Setup",
+      "description": "Quick scalp requiring tight spread, green tape, RSI not overbought.",
+      "builtIn": true,
+      "requireAll": true,
+      "tags": [
+        "scalp",
+        "spread",
+        "tape"
+      ],
+      "rules": [
+        {
+          "variable": "SPREAD_PCT",
+          "operator": "lt",
+          "value": 0.8,
+          "description": "Spread under 0.8%"
+        },
+        {
+          "variable": "TAPE",
+          "operator": "eq",
+          "value": "Green",
+          "description": "Tape green"
+        },
+        {
+          "variable": "RSI_1M",
+          "operator": "lt",
+          "value": 70,
+          "description": "RSI not overbought"
+        },
+        {
+          "variable": "VOLUME_RATIO",
+          "operator": "gte",
+          "value": 1.0,
+          "description": "At least average volume"
+        }
+      ]
+    }
+  ],
   "messages": [
     {
       "id": "msg_001",
@@ -156,7 +643,7 @@
     {
       "id": "msg_010",
       "category": "intrade",
-      "description": "Volume spike \u2014 check momentum",
+      "description": "Volume spike - check momentum",
       "strategy": "all",
       "mode": [
         "intrade"
@@ -170,7 +657,7 @@
     {
       "id": "msg_011",
       "category": "intrade",
-      "description": "Tape going red \u2014 danger check",
+      "description": "Tape going red - danger check",
       "strategy": "all",
       "mode": [
         "intrade"
@@ -184,7 +671,7 @@
     {
       "id": "msg_012",
       "category": "intrade",
-      "description": "Price at resistance \u2014 hold or exit?",
+      "description": "Price at resistance - hold or exit?",
       "strategy": "regular",
       "mode": [
         "intrade"
@@ -212,7 +699,7 @@
     {
       "id": "msg_014",
       "category": "intrade",
-      "description": "Scalp \u2014 time check, still in?",
+      "description": "Scalp - time check, still in?",
       "strategy": "scalp",
       "mode": [
         "intrade"
@@ -226,7 +713,7 @@
     {
       "id": "msg_015",
       "category": "exit",
-      "description": "Emergency \u2014 exit now or hold?",
+      "description": "Emergency - exit now or hold?",
       "strategy": "all",
       "mode": [
         "intrade",
@@ -283,12 +770,12 @@
     },
     {
       "id": "msg_snapshot",
-      "label": "Data Snapshot \u2014 all indicators",
+      "label": "Data Snapshot - all indicators",
       "category": "analysis",
       "favorite": true,
-      "buttonText": "\ud83d\udcca Snapshot",
+      "buttonText": "📊 Snapshot",
       "buttonStyle": "blue",
-      "template": "\ud83d\udcca DATA SNAPSHOT \u2014 [T] at [TIME_ET]\n\nPRICE: [P] | VWAP: [VWAP] | Spread: [SPREAD]\nRSI: [RSI] (1m) / [RSI5] (5m) / [RSI15] (15m)\nMACD: [MACD] | Histogram: [MACDH]\nEMA20: [EMA20] | EMA50: [EMA50] | SMA20: [SMA20]\nBID: [BID] | ASK: [ASK]\nVolume: [VOLRAW] ([VOL]) | Tape: [TAPE]\nMode: [MODE] | Strategy: [STRAT]\n\nWhat do you see? Go / No-Go?"
+      "template": "📊 DATA SNAPSHOT - [T] at [TIME_ET]\n\nPRICE: [P] | VWAP: [VWAP] | Spread: [SPREAD]\nRSI: [RSI] (1m) / [RSI5] (5m) / [RSI15] (15m)\nMACD: [MACD] | Histogram: [MACDH]\nEMA20: [EMA20] | EMA50: [EMA50] | SMA20: [SMA20]\nBID: [BID] | ASK: [ASK]\nVolume: [VOLRAW] ([VOL]) | Tape: [TAPE]\nMode: [MODE] | Strategy: [STRAT]\n\nWhat do you see? Go / No-Go?"
     }
   ],
   "alerts": [
@@ -301,18 +788,20 @@
       "message_id": "msg_006",
       "strategy": "regular",
       "autoSend": false,
-      "template": "\u26a0\ufe0f RSI overbought on [T]. RSI [RSI] at [TIME_ET]. Price [P] vs VWAP [VWAP]. Entry [E], P&L [PNL]. Momentum fading \u2014 is thesis still intact?"
+      "template": "⚠️ RSI overbought on [T]. RSI [RSI] at [TIME_ET]. Price [P] vs VWAP [VWAP]. Entry [E], P&L [PNL]. Momentum fading - is thesis still intact?",
+      "sentiment": "bearish"
     },
     {
       "id": "alert_002",
       "condition": "RSI_1M < 30",
       "severity": "info",
       "label": "RSI oversold",
-      "description": "RSI crossed 30 \u2014 potential reversal",
+      "description": "RSI crossed 30 - potential reversal",
       "message_id": "msg_013",
       "strategy": "regular",
       "autoSend": false,
-      "template": "RSI oversold on [T]. RSI [RSI] at [TIME_ET]. Price [P], VWAP [VWAP], Vol [VOL], Tape [TAPE]. Reversal setup forming or more downside?"
+      "template": "RSI oversold on [T]. RSI [RSI] at [TIME_ET]. Price [P], VWAP [VWAP], Vol [VOL], Tape [TAPE]. Reversal setup forming or more downside?",
+      "sentiment": "bearish"
     },
     {
       "id": "alert_003",
@@ -323,18 +812,20 @@
       "message_id": "msg_010",
       "strategy": "all",
       "autoSend": false,
-      "template": "Volume spike on [T] \u2014 [VOL] at [TIME_ET]. Price [P], entry [E], RSI [RSI], Tape [TAPE]. Accumulation or distribution? Does this change the trade?"
+      "template": "Volume spike on [T] - [VOL] at [TIME_ET]. Price [P], entry [E], RSI [RSI], Tape [TAPE]. Accumulation or distribution? Does this change the trade?",
+      "sentiment": "neutral"
     },
     {
       "id": "alert_004",
       "condition": "VOLUME_RATIO > 3.0",
       "severity": "warning",
-      "label": "Volume spike 3x+ \u2014 major",
-      "description": "Unusually high volume \u2014 action likely",
+      "label": "Volume spike 3x+ - major",
+      "description": "Unusually high volume - action likely",
       "message_id": "msg_010",
       "strategy": "all",
       "autoSend": false,
-      "template": "MAJOR volume spike on [T] \u2014 [VOL] at [TIME_ET]. Price [P], entry [E], RSI [RSI], Tape [TAPE], Spread [SPREAD]. Big move coming \u2014 accumulation, distribution, or halt risk?"
+      "template": "MAJOR volume spike on [T] - [VOL] at [TIME_ET]. Price [P], entry [E], RSI [RSI], Tape [TAPE], Spread [SPREAD]. Big move coming - accumulation, distribution, or halt risk?",
+      "sentiment": "neutral"
     },
     {
       "id": "alert_005",
@@ -345,29 +836,32 @@
       "message_id": "msg_015",
       "strategy": "all",
       "autoSend": false,
-      "template": "\ud83d\udd34 STOP HIT on [T]. Price [P] reached stop [S]. Entry [E], P&L [PNL], time in [TIME]. Tape [TAPE]. Exit at market or has it bounced? Immediate read needed."
+      "template": "🔴 STOP HIT on [T]. Price [P] reached stop [S]. Entry [E], P&L [PNL], time in [TIME]. Tape [TAPE]. Exit at market or has it bounced? Immediate read needed.",
+      "sentiment": "bearish"
     },
     {
       "id": "alert_006",
       "condition": "SPREAD_PCT > 1.5",
       "severity": "danger",
-      "label": "Spread too wide \u2014 scalp danger",
-      "description": "Spread exceeds 1.5% \u2014 scalp not viable",
+      "label": "Spread too wide - scalp danger",
+      "description": "Spread exceeds 1.5% - scalp not viable",
       "message_id": "msg_004",
       "strategy": "scalp",
       "autoSend": false,
-      "template": "\ud83d\udd34 Spread too wide for scalp on [T]. Spread [SPREAD] at [TIME_ET]. Do not enter. Wait for spread to tighten or abort scalp setup."
+      "template": "🔴 Spread too wide for scalp on [T]. Spread [SPREAD] at [TIME_ET]. Do not enter. Wait for spread to tighten or abort scalp setup.",
+      "sentiment": "bearish"
     },
     {
       "id": "alert_007",
       "condition": "SPREAD_PCT > 0.8",
       "severity": "warning",
-      "label": "Spread widening \u2014 scalp caution",
+      "label": "Spread widening - scalp caution",
       "description": "Spread widening, watch for exit",
       "message_id": "msg_014",
       "strategy": "scalp",
       "autoSend": false,
-      "template": "\u26a0\ufe0f Spread widening on [T]. Spread [SPREAD] at [TIME_ET]. Price [P], entry [E], P&L [PNL]. If in trade, prepare to exit before spread widens further."
+      "template": "⚠️ Spread widening on [T]. Spread [SPREAD] at [TIME_ET]. Price [P], entry [E], P&L [PNL]. If in trade, prepare to exit before spread widens further.",
+      "sentiment": "bearish"
     },
     {
       "id": "alert_008",
@@ -378,7 +872,8 @@
       "message_id": "msg_011",
       "strategy": "all",
       "autoSend": false,
-      "template": "\u26a0\ufe0f Tape flipping red fast on [T] at [TIME_ET]. Price [P], entry [E], stop [S], P&L [PNL]. RSI [RSI], Vol [VOL]. Sellers stepping in \u2014 shakeout or real reversal?"
+      "template": "⚠️ Tape flipping red fast on [T] at [TIME_ET]. Price [P], entry [E], stop [S], P&L [PNL]. RSI [RSI], Vol [VOL]. Sellers stepping in - shakeout or real reversal?",
+      "sentiment": "bearish"
     },
     {
       "id": "alert_009",
@@ -389,7 +884,8 @@
       "message_id": "msg_009",
       "strategy": "regular",
       "autoSend": false,
-      "template": "Target 1 hit on [T]. Price [P] reached [TG1]. Entry [E], P&L [PNL], time in [TIME]. RSI [RSI], Vol [VOL], Tape [TAPE]. Scale out 50% now or hold for Target 2 [TG2]?"
+      "template": "Target 1 hit on [T]. Price [P] reached [TG1]. Entry [E], P&L [PNL], time in [TIME]. RSI [RSI], Vol [VOL], Tape [TAPE]. Scale out 50% now or hold for Target 2 [TG2]?",
+      "sentiment": "bullish"
     },
     {
       "id": "alert_010",
@@ -400,29 +896,32 @@
       "message_id": "msg_016",
       "strategy": "regular",
       "autoSend": false,
-      "template": "Target 2 hit on [T]. Price [P] reached [TG2]. Entry [E], P&L [PNL], time in [TIME]. RSI [RSI], Tape [TAPE]. Full exit or is there more? Trail stop or take profits?"
+      "template": "Target 2 hit on [T]. Price [P] reached [TG2]. Entry [E], P&L [PNL], time in [TIME]. RSI [RSI], Tape [TAPE]. Full exit or is there more? Trail stop or take profits?",
+      "sentiment": "bullish"
     },
     {
       "id": "alert_011",
       "condition": "MACD crosses above signal line",
       "severity": "info",
       "label": "MACD bullish cross",
-      "description": "MACD line crossed above signal \u2014 bullish momentum",
+      "description": "MACD line crossed above signal - bullish momentum",
       "message_id": "msg_006",
       "strategy": "regular",
       "autoSend": false,
-      "template": "MACD bullish cross on [T] at [TIME_ET]. MACD [MACD], Price [P], RSI [RSI], VWAP [VWAP], Vol [VOL]. Momentum building \u2014 entry or hold?"
+      "template": "MACD bullish cross on [T] at [TIME_ET]. MACD [MACD], Price [P], RSI [RSI], VWAP [VWAP], Vol [VOL]. Momentum building - entry or hold?",
+      "sentiment": "bullish"
     },
     {
       "id": "alert_012",
       "condition": "MACD crosses below signal line",
       "severity": "warning",
       "label": "MACD bearish cross",
-      "description": "MACD line crossed below signal \u2014 bearish momentum",
+      "description": "MACD line crossed below signal - bearish momentum",
       "message_id": "msg_011",
       "strategy": "regular",
       "autoSend": false,
-      "template": "\u26a0\ufe0f MACD bearish cross on [T] at [TIME_ET]. MACD [MACD], Price [P], RSI [RSI], VWAP [VWAP]. Momentum flipping \u2014 scale out or exit?"
+      "template": "⚠️ MACD bearish cross on [T] at [TIME_ET]. MACD [MACD], Price [P], RSI [RSI], VWAP [VWAP]. Momentum flipping - scale out or exit?",
+      "sentiment": "bearish"
     },
     {
       "id": "alert_013",
@@ -433,7 +932,8 @@
       "message_id": "msg_013",
       "strategy": "regular",
       "autoSend": false,
-      "template": "[T] reclaiming VWAP [VWAP] at [TIME_ET]. Price [P], RSI [RSI], Vol [VOL], Tape [TAPE]. Confirmed reclaim or fake? Entry on reclaim or wait for retest?"
+      "template": "[T] reclaiming VWAP [VWAP] at [TIME_ET]. Price [P], RSI [RSI], Vol [VOL], Tape [TAPE]. Confirmed reclaim or fake? Entry on reclaim or wait for retest?",
+      "sentiment": "bullish"
     },
     {
       "id": "alert_014",
@@ -444,18 +944,20 @@
       "message_id": "msg_011",
       "strategy": "regular",
       "autoSend": false,
-      "template": "\u26a0\ufe0f [T] lost VWAP [VWAP] at [TIME_ET]. Price [P], entry [E], stop [S], P&L [PNL], RSI [RSI], Tape [TAPE]. Thesis weakening \u2014 tighten stop or exit?"
+      "template": "⚠️ [T] lost VWAP [VWAP] at [TIME_ET]. Price [P], entry [E], stop [S], P&L [PNL], RSI [RSI], Tape [TAPE]. Thesis weakening - tighten stop or exit?",
+      "sentiment": "bearish"
     },
     {
       "id": "alert_015",
       "condition": "SCALP_TIME > 120",
       "severity": "warning",
-      "label": "Scalp \u2014 2 min elapsed",
+      "label": "Scalp - 2 min elapsed",
       "description": "Scalp window closing",
       "message_id": "msg_014",
       "strategy": "scalp",
       "autoSend": false,
-      "template": "\u26a0\ufe0f Scalp time alert on [T]. In trade [TIME] \u2014 2 minute window reached. Price [P], entry [E], P&L [PNL], Spread [SPREAD], Tape [TAPE]. Exit now or is there a clear reason to hold?"
+      "template": "⚠️ Scalp time alert on [T]. In trade [TIME] - 2 minute window reached. Price [P], entry [E], P&L [PNL], Spread [SPREAD], Tape [TAPE]. Exit now or is there a clear reason to hold?",
+      "sentiment": "neutral"
     },
     {
       "id": "alert_016",
@@ -466,51 +968,56 @@
       "message_id": "msg_012",
       "strategy": "regular",
       "autoSend": false,
-      "template": "[T] approaching intraday high [HIGH] at [TIME_ET]. Price [P], entry [E], RSI [RSI], Vol [VOL], Tape [TAPE]. Blue sky breakout potential or resistance rejection? Scale here or hold?"
+      "template": "[T] approaching intraday high [HIGH] at [TIME_ET]. Price [P], entry [E], RSI [RSI], Vol [VOL], Tape [TAPE]. Blue sky breakout potential or resistance rejection? Scale here or hold?",
+      "sentiment": "bullish"
     },
     {
       "id": "alert_001b",
       "condition": "RSI drops below 70 after being above",
       "severity": "warning",
       "label": "RSI overbought reclaim (bearish)",
-      "description": "RSI dropped back below 70 \u2014 momentum fading",
+      "description": "RSI dropped back below 70 - momentum fading",
       "message_id": "msg_006",
       "strategy": "regular",
       "autoSend": false,
-      "template": "\u26a0\ufe0f RSI overbought reclaim on [T] at [TIME_ET]. RSI dropped below 70: [RSI]. Price [P], VWAP [VWAP]. Momentum fading \u2014 scale out or tighten stop?"
+      "template": "⚠️ RSI overbought reclaim on [T] at [TIME_ET]. RSI dropped below 70: [RSI]. Price [P], VWAP [VWAP]. Momentum fading - scale out or tighten stop?",
+      "sentiment": "bearish"
     },
     {
       "id": "alert_002b",
       "condition": "RSI rises above 30 after being below",
       "severity": "info",
       "label": "RSI oversold reclaim (bullish)",
-      "description": "RSI reclaimed above 30 \u2014 potential bottom",
+      "description": "RSI reclaimed above 30 - potential bottom",
       "message_id": "msg_003",
       "strategy": "regular",
       "autoSend": false,
-      "template": "\u2705 RSI oversold reclaim on [T] at [TIME_ET]. RSI recovered above 30: [RSI]. Price [P], VWAP [VWAP], Vol [VOL]. Reversal forming \u2014 entry opportunity?"
+      "template": "✅ RSI oversold reclaim on [T] at [TIME_ET]. RSI recovered above 30: [RSI]. Price [P], VWAP [VWAP], Vol [VOL]. Reversal forming - entry opportunity?",
+      "sentiment": "bullish"
     },
     {
       "id": "alert_rsi50_up",
       "condition": "RSI crosses above 50",
       "severity": "info",
-      "label": "RSI crossed 50 \u2014 bullish",
-      "description": "RSI crossed above 50 \u2014 momentum shifting bullish",
+      "label": "RSI crossed 50 - bullish",
+      "description": "RSI crossed above 50 - momentum shifting bullish",
       "message_id": "msg_006",
       "strategy": "regular",
       "autoSend": false,
-      "template": "RSI crossed above 50 on [T] at [TIME_ET]. RSI [RSI], MACD [MACD], Price [P] vs VWAP [VWAP], Vol [VOL]. Momentum shifting bullish \u2014 entry or add?"
+      "template": "RSI crossed above 50 on [T] at [TIME_ET]. RSI [RSI], MACD [MACD], Price [P] vs VWAP [VWAP], Vol [VOL]. Momentum shifting bullish - entry or add?",
+      "sentiment": "bullish"
     },
     {
       "id": "alert_rsi50_dn",
       "condition": "RSI crosses below 50",
       "severity": "warning",
-      "label": "RSI crossed 50 \u2014 bearish",
-      "description": "RSI crossed below 50 \u2014 momentum shifting bearish",
+      "label": "RSI crossed 50 - bearish",
+      "description": "RSI crossed below 50 - momentum shifting bearish",
       "message_id": "msg_011",
       "strategy": "regular",
       "autoSend": false,
-      "template": "\u26a0\ufe0f RSI crossed below 50 on [T] at [TIME_ET]. RSI [RSI], MACD [MACD], Price [P] vs VWAP [VWAP]. Momentum shifting bearish \u2014 tighten stop or exit?"
+      "template": "⚠️ RSI crossed below 50 on [T] at [TIME_ET]. RSI [RSI], MACD [MACD], Price [P] vs VWAP [VWAP]. Momentum shifting bearish - tighten stop or exit?",
+      "sentiment": "bearish"
     },
     {
       "id": "alert_hod",
@@ -521,29 +1028,32 @@
       "message_id": "msg_007",
       "strategy": "regular",
       "autoSend": false,
-      "template": "HOD breakout on [T] at [TIME_ET]. Price [P] closed above session high, Vol [VOL], RSI [RSI], MACD [MACD]. Blue sky territory \u2014 hold for continuation or take partial?"
+      "template": "HOD breakout on [T] at [TIME_ET]. Price [P] closed above session high, Vol [VOL], RSI [RSI], MACD [MACD]. Blue sky territory - hold for continuation or take partial?",
+      "sentiment": "bullish"
     },
     {
       "id": "alert_ema50_lost",
       "condition": "Price closes below EMA50",
       "severity": "warning",
       "label": "EMA50 lost",
-      "description": "Price closed below EMA50 \u2014 key support broken",
+      "description": "Price closed below EMA50 - key support broken",
       "message_id": "msg_011",
       "strategy": "regular",
       "autoSend": false,
-      "template": "\u26a0\ufe0f EMA50 lost on [T] at [TIME_ET]. Price [P] closed below EMA50. RSI [RSI], VWAP [VWAP], Vol [VOL]. First defense line broken \u2014 tighten stop, next target EMA100."
+      "template": "⚠️ EMA50 lost on [T] at [TIME_ET]. Price [P] closed below EMA50. RSI [RSI], VWAP [VWAP], Vol [VOL]. First defense line broken - tighten stop, next target EMA100.",
+      "sentiment": "bearish"
     },
     {
       "id": "alert_ema50_bounce",
       "condition": "Price bounces off EMA50",
       "severity": "info",
       "label": "EMA50 bounce",
-      "description": "Price touched EMA50 and closed above \u2014 support held",
+      "description": "Price touched EMA50 and closed above - support held",
       "message_id": "msg_003",
       "strategy": "regular",
       "autoSend": false,
-      "template": "EMA50 bounce on [T] at [TIME_ET]. Price [P] tapped EMA50 and closed above. RSI [RSI], Vol [VOL], Tape [TAPE]. Classic support hold \u2014 entry or add to position?"
+      "template": "EMA50 bounce on [T] at [TIME_ET]. Price [P] tapped EMA50 and closed above. RSI [RSI], Vol [VOL], Tape [TAPE]. Classic support hold - entry or add to position?",
+      "sentiment": "bullish"
     },
     {
       "id": "alert_vol_div",
@@ -554,7 +1064,8 @@
       "message_id": "msg_011",
       "strategy": "regular",
       "autoSend": false,
-      "template": "\u26a0\ufe0f Volume divergence on [T] at [TIME_ET]. Price making new highs but volume declining \u2014 [VOL]. RSI [RSI], MACD [MACD]. Move not confirmed. Reversal risk high \u2014 scale out?"
+      "template": "⚠️ Volume divergence on [T] at [TIME_ET]. Price making new highs but volume declining - [VOL]. RSI [RSI], MACD [MACD]. Move not confirmed. Reversal risk high - scale out?",
+      "sentiment": "bearish"
     },
     {
       "id": "alert_round",
@@ -565,7 +1076,8 @@
       "message_id": "msg_012",
       "strategy": "all",
       "autoSend": false,
-      "template": "Round number test on [T] at [TIME_ET]. Price [P] approaching key level. RSI [RSI], Vol [VOL], Tape [TAPE]. Expect wall or slow tape \u2014 break or reject?"
+      "template": "Round number test on [T] at [TIME_ET]. Price [P] approaching key level. RSI [RSI], Vol [VOL], Tape [TAPE]. Expect wall or slow tape - break or reject?",
+      "sentiment": "neutral"
     },
     {
       "id": "alert_news",
@@ -576,40 +1088,44 @@
       "message_id": "msg_001",
       "strategy": "all",
       "autoSend": false,
-      "template": "\ud83d\udcf0 News on [T] at [TIME_ET]. Price [P], Vol [VOL]. Analyze catalyst: is this a real move or a trap? Go or no-go?"
+      "template": "📰 News on [T] at [TIME_ET]. Price [P], Vol [VOL]. Analyze catalyst: is this a real move or a trap? Go or no-go?",
+      "sentiment": "neutral"
     },
     {
       "id": "alert_float_turnover",
       "condition": "Daily volume exceeds float",
       "severity": "warning",
       "label": "Float turnover",
-      "description": "Daily vol exceeded float \u2014 extreme volatility expected",
+      "description": "Daily vol exceeded float - extreme volatility expected",
       "message_id": "msg_010",
       "strategy": "all",
       "autoSend": false,
-      "template": "\u26a1 Float turnover on [T] at [TIME_ET]. Vol [VOL] has exceeded the float. Extreme volatility both ways \u2014 squeeze conditions active. Price [P], RSI [RSI]. Scalp only or stay out?"
+      "template": "⚡ Float turnover on [T] at [TIME_ET]. Vol [VOL] has exceeded the float. Extreme volatility both ways - squeeze conditions active. Price [P], RSI [RSI]. Scalp only or stay out?",
+      "sentiment": "neutral"
     },
     {
       "id": "alert_tape_ask",
       "condition": "Bar closing in top 20% of range on volume",
       "severity": "info",
-      "label": "Tape \u2014 ask lifts dominant",
-      "description": "Buyers aggressively hitting ask \u2014 bullish tape",
+      "label": "Tape - ask lifts dominant",
+      "description": "Buyers aggressively hitting ask - bullish tape",
       "message_id": "msg_006",
       "strategy": "all",
       "autoSend": false,
-      "template": "Tape bullish on [T] at [TIME_ET]. Bar closing near high \u2014 ask lifts dominant. Price [P], Vol [VOL], RSI [RSI], VWAP [VWAP]. Buyers in control \u2014 momentum entry?"
+      "template": "Tape bullish on [T] at [TIME_ET]. Bar closing near high - ask lifts dominant. Price [P], Vol [VOL], RSI [RSI], VWAP [VWAP]. Buyers in control - momentum entry?",
+      "sentiment": "bullish"
     },
     {
       "id": "alert_tape_bid",
       "condition": "Bar closing in bottom 20% of range on volume",
       "severity": "warning",
-      "label": "Tape \u2014 bid hits dominant",
-      "description": "Sellers hitting bids aggressively \u2014 bearish tape",
+      "label": "Tape - bid hits dominant",
+      "description": "Sellers hitting bids aggressively - bearish tape",
       "message_id": "msg_011",
       "strategy": "all",
       "autoSend": false,
-      "template": "\u26a0\ufe0f Tape bearish on [T] at [TIME_ET]. Bar closing near low \u2014 bid hits dominant. Price [P], Vol [VOL], RSI [RSI]. Sellers in control \u2014 exit or stay out."
+      "template": "⚠️ Tape bearish on [T] at [TIME_ET]. Bar closing near low - bid hits dominant. Price [P], Vol [VOL], RSI [RSI]. Sellers in control - exit or stay out.",
+      "sentiment": "bearish"
     }
   ],
   "settings": {
