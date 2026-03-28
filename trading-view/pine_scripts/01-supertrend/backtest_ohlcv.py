@@ -239,6 +239,8 @@ class StrategyConfig:
     equity_pct: float = 100.0
     commission_pct: float = 0.1
     slippage_pct: float = 0.02  # approximate slippage as %
+    # Resample timeframe (None = use raw data)
+    resample: str | None = None  # e.g. "1D", "4h"
 
 
 STRATEGIES = {
@@ -365,7 +367,55 @@ STRATEGIES = {
         min_hold_bars=12,
         equity_pct=50.0,
     ),
+    # ─── V8 DAILY STRATEGIES (1D chart, ATR 2, Factor 1) ────────────────────
+    # Matches user's TradingView findings: BTC +$1400, ETH +$1846, DOGE +$600
+    "supertrend_v8_daily_pure": StrategyConfig(
+        name="supertrend_v8_daily_pure",
+        timeframe="1D",
+        atr_period=2, factor=1.0,
+        use_rsi_exit=False,
+        use_stop=False,
+        use_adx=False, use_ema=False, use_vol_filter=False,
+        use_cooldown=False, use_rsi_entry_filter=False,
+        resample="1D",
+    ),
+    "supertrend_v8_daily_rsi_exit": StrategyConfig(
+        name="supertrend_v8_daily_rsi_exit",
+        timeframe="1D",
+        atr_period=2, factor=1.0,
+        use_rsi_exit=True, rsi_overbought=80,
+        use_stop=False,
+        use_adx=False, use_ema=False, use_vol_filter=False,
+        use_cooldown=False, use_rsi_entry_filter=False,
+        resample="1D",
+    ),
+    "supertrend_v8_daily_rsi70": StrategyConfig(
+        name="supertrend_v8_daily_rsi70",
+        timeframe="1D",
+        atr_period=2, factor=1.0,
+        use_rsi_exit=True, rsi_overbought=70,
+        use_stop=False,
+        use_adx=False, use_ema=False, use_vol_filter=False,
+        use_cooldown=False, use_rsi_entry_filter=False,
+        resample="1D",
+    ),
 }
+
+
+# ─── RESAMPLE OHLCV TO HIGHER TIMEFRAME ────────────────────────────────────
+def resample_ohlcv(df: pd.DataFrame, tf: str) -> pd.DataFrame:
+    """Resample 5m OHLCV data to a higher timeframe (e.g. '1D', '4h')."""
+    df = df.copy()
+    df = df.set_index("datetime")
+    resampled = df.resample(tf).agg({
+        "open": "first",
+        "high": "max",
+        "low": "min",
+        "close": "last",
+        "volume": "sum",
+    }).dropna()
+    resampled = resampled.reset_index()
+    return resampled
 
 
 # ─── BACKTESTER ─────────────────────────────────────────────────────────────
@@ -695,6 +745,11 @@ def main():
             df = pd.read_csv(ohlcv_path)
             df["datetime"] = pd.to_datetime(df["datetime"], errors="coerce", utc=True)
             df = df.dropna(subset=["datetime"]).reset_index(drop=True)
+
+            # Resample if strategy requires a higher timeframe
+            if cfg.resample:
+                df = resample_ohlcv(df, cfg.resample)
+
             data_days = (df["datetime"].iloc[-1] - df["datetime"].iloc[0]).total_seconds() / 86400
 
             # Full dataset backtest
