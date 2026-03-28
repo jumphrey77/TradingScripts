@@ -226,6 +226,9 @@ class StrategyConfig:
     use_vol_filter: bool = False
     vol_ma_length: int = 20
     vol_multiplier: float = 0.8
+    # RSI entry filter
+    use_rsi_entry_filter: bool = False
+    rsi_entry_max: int = 65  # Don't enter if RSI already above this
     # Cooldown
     use_cooldown: bool = False
     cooldown_bars: int = 6
@@ -294,6 +297,72 @@ STRATEGIES = {
         use_vol_filter=True, vol_ma_length=20, vol_multiplier=1.0,
         use_cooldown=True, cooldown_bars=12,
         min_hold_bars=6,
+        equity_pct=50.0,
+    ),
+    # V6b: Ultra strict — ADX 35, EMA 200, wide trailing 3.5x, 18-bar cooldown
+    "supertrend_v6b_ultra": StrategyConfig(
+        name="supertrend_v6b_ultra",
+        atr_period=14, factor=5.0,
+        use_rsi_exit=True, rsi_overbought=70,
+        use_stop=True, sl_atr_mult=3.5, trailing_stop=True,
+        use_hard_stop=True, hard_stop_pct=10.0,
+        use_adx=True, adx_length=14, adx_threshold=35,
+        use_ema=True, ema_length=200,
+        use_vol_filter=True, vol_ma_length=20, vol_multiplier=1.0,
+        use_cooldown=True, cooldown_bars=18,
+        min_hold_bars=12,
+    ),
+    # V7a: v6b + RSI entry filter (don't enter if already overbought)
+    "supertrend_v7a_rsi_entry": StrategyConfig(
+        name="supertrend_v7a_rsi_entry",
+        atr_period=14, factor=5.0,
+        use_rsi_exit=True, rsi_overbought=70,
+        use_stop=True, sl_atr_mult=3.5, trailing_stop=True,
+        use_hard_stop=True, hard_stop_pct=10.0,
+        use_adx=True, adx_length=14, adx_threshold=35,
+        use_ema=True, ema_length=200,
+        use_vol_filter=True, vol_ma_length=20, vol_multiplier=1.0,
+        use_cooldown=True, cooldown_bars=18,
+        min_hold_bars=12,
+        use_rsi_entry_filter=True, rsi_entry_max=65,
+    ),
+    # V7b: v6b + no stop at all (only exit via RSI or ST flip)
+    "supertrend_v7b_no_stop": StrategyConfig(
+        name="supertrend_v7b_no_stop",
+        atr_period=14, factor=5.0,
+        use_rsi_exit=True, rsi_overbought=70,
+        use_stop=False,
+        use_adx=True, adx_length=14, adx_threshold=35,
+        use_ema=True, ema_length=200,
+        use_vol_filter=True, vol_ma_length=20, vol_multiplier=1.0,
+        use_cooldown=False,
+        min_hold_bars=12,
+    ),
+    # V7c: v6b + hard stop only (no trailing — just emergency 10% floor)
+    "supertrend_v7c_hard_only": StrategyConfig(
+        name="supertrend_v7c_hard_only",
+        atr_period=14, factor=5.0,
+        use_rsi_exit=True, rsi_overbought=70,
+        use_stop=True, sl_atr_mult=99.0, trailing_stop=False,
+        use_hard_stop=True, hard_stop_pct=10.0,
+        use_adx=True, adx_length=14, adx_threshold=35,
+        use_ema=True, ema_length=200,
+        use_vol_filter=True, vol_ma_length=20, vol_multiplier=1.0,
+        use_cooldown=True, cooldown_bars=18,
+        min_hold_bars=12,
+    ),
+    # V7d: v6b + half equity (risk reduction)
+    "supertrend_v7d_half_equity": StrategyConfig(
+        name="supertrend_v7d_half_equity",
+        atr_period=14, factor=5.0,
+        use_rsi_exit=True, rsi_overbought=70,
+        use_stop=True, sl_atr_mult=3.5, trailing_stop=True,
+        use_hard_stop=True, hard_stop_pct=10.0,
+        use_adx=True, adx_length=14, adx_threshold=35,
+        use_ema=True, ema_length=200,
+        use_vol_filter=True, vol_ma_length=20, vol_multiplier=1.0,
+        use_cooldown=True, cooldown_bars=18,
+        min_hold_bars=12,
         equity_pct=50.0,
     ),
 }
@@ -436,6 +505,9 @@ def run_backtest(df: pd.DataFrame, cfg: StrategyConfig) -> tuple[list[Trade], pd
                 equity_curve[i] = equity
                 continue
             if cfg.use_vol_filter and (np.isnan(vol_ma[i]) or v[i] <= vol_ma[i] * cfg.vol_multiplier):
+                equity_curve[i] = equity
+                continue
+            if cfg.use_rsi_entry_filter and not np.isnan(rsi[i]) and rsi[i] > cfg.rsi_entry_max:
                 equity_curve[i] = equity
                 continue
             if cfg.use_cooldown and bars_since_stop <= cfg.cooldown_bars:
