@@ -495,6 +495,38 @@ function renderProjectDetail(details) {
     </div>
   `;
 
+  // ── WILDCARDS ──────────────────────────────────────────────────────────────
+  const wildcards = map.wildcards || [];
+  const wildcardsHtml = `
+    <div class="detail-card" id="wildcardsCard">
+      <div class="detail-card-header">
+        <div class="detail-card-title">WILDCARD PATTERNS (${wildcards.length})</div>
+        <button class="btn-edit-exclusions" id="btnAddWildcard">+ Add</button>
+      </div>
+      <div class="detail-card-body" style="padding:8px 12px">
+        ${wildcards.length === 0
+          ? `<div style="color:var(--text-muted);font-size:12px;line-height:1.6">
+              No wildcard patterns yet. Add patterns to match versioned or variable filenames.<br>
+              <span style="font-family:var(--font-mono);font-size:11px;color:var(--accent)">Example: BlahBlahBlahv*.*</span>
+             </div>`
+          : wildcards.map(wc => `
+              <div class="wildcard-row" data-pattern="${escapeHtml(wc.pattern)}">
+                <div class="wildcard-info">
+                  <span class="wildcard-pattern">${escapeHtml(wc.pattern)}</span>
+                  <span class="wildcard-arrow">&#x2192;</span>
+                  <span class="wildcard-dest">${escapeHtml(wc.destination)}</span>
+                  ${wc.description ? `<span class="wildcard-desc">${escapeHtml(wc.description)}</span>` : ''}
+                </div>
+                <div class="wildcard-actions">
+                  <button class="btn-wc-edit" data-pattern="${escapeHtml(wc.pattern)}">Edit</button>
+                  <button class="btn-wc-delete" data-pattern="${escapeHtml(wc.pattern)}">&#x2715;</button>
+                </div>
+              </div>`).join('')
+        }
+      </div>
+    </div>
+  `;
+
   // ── FILE MAP (with size column, fills full height) ─────────────────────────
   const mapHtml = `
     <div class="detail-card detail-card-full-height">
@@ -509,6 +541,7 @@ function renderProjectDetail(details) {
             <div class="map-col-name">File Name</div>
             <div class="map-col-dest">Path</div>
             <div class="map-col-size">Size</div>
+            <div class="map-col-wildcard">Wildcard</div>
           </div>
           <div id="mapEntriesLoading" style="color:var(--text-muted);font-size:11px;padding:8px 4px">Loading sizes…</div>
         </div>
@@ -540,6 +573,7 @@ function renderProjectDetail(details) {
         ${infoHtml}
         ${runLogHtml}
         ${unmatchedHtml}
+        ${wildcardsHtml}
       </div>
       <div class="detail-col-right">
         ${mapHtml}
@@ -548,9 +582,27 @@ function renderProjectDetail(details) {
   `;
 
   // ── Bind buttons ──────────────────────────────────────────────────────────
-  $('btnEditExclusions').addEventListener('click', () => openExclusionsModal(details.name));
+  on('btnEditExclusions', 'click', () => openExclusionsModal(details.name));
   on('btnOpenProjectFolder', 'click', () => zm.openProjectFolder(details.name));
-  $('btnRebuildMapDetail').addEventListener('click', () => rebuildMap(details.name));
+
+  // Wildcard: add
+  on('btnAddWildcard', 'click', () => openWildcardModal(details.name, null));
+
+  // Wildcard: edit & delete (delegated)
+  document.querySelectorAll('.btn-wc-edit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const wc = (map.wildcards || []).find(w => w.pattern === btn.dataset.pattern);
+      if (wc) openWildcardModal(details.name, wc);
+    });
+  });
+  document.querySelectorAll('.btn-wc-delete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Remove wildcard pattern "' + btn.dataset.pattern + '"?')) return;
+      await zm.removeWildcard(details.name, btn.dataset.pattern);
+      openProject(details.name);
+    });
+  });
+  on('btnRebuildMapDetail', 'click', () => rebuildMap(details.name));
 
   const btnViewLog = $('btnViewLog');
   if (btnViewLog) btnViewLog.addEventListener('click', () => zm.openRunLog(details.name));
@@ -596,9 +648,25 @@ function renderProjectDetail(details) {
     const filesWithSizes = res.success ? (res.map.filesWithSizes || {}) : {};
 
     const excludedFilesSet = new Set((map.excludedFiles || []).map(f => f.toLowerCase()));
+    const wildcardPatterns = map.wildcards || [];
+
+    // Build a lookup: filename → which wildcard pattern covers it
+    function getWildcardForFile(fname) {
+      for (const wc of wildcardPatterns) {
+        // Must handle [*] BEFORE escaping other chars
+        let p = wc.pattern.replace(/\[\*\]/g, '\x00SC\x00');
+        p = p.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+        p = p.replace(/\x00SC\x00/g, '.');
+        p = p.replace(/\*/g, '.*');
+        if (new RegExp('^' + p + '$', 'i').test(fname)) return wc.pattern;
+      }
+      return null;
+    }
+
     const entriesHtml = fileEntries.map(([filename, dest]) => {
       const info = filesWithSizes[filename] || {};
       const isExcluded = excludedFilesSet.has(filename.toLowerCase());
+      const matchingWildcard = getWildcardForFile(filename);
       const size = isExcluded ? '—' : (info.size != null
         ? (info.size < 1024 ? info.size+'B' : info.size < 1048576 ? (info.size/1024).toFixed(1)+'KB' : (info.size/1048576).toFixed(2)+'MB')
         : '—');
@@ -607,6 +675,7 @@ function renderProjectDetail(details) {
           <div class="map-col-name map-entry-name">${escapeHtml(filename)}${collisions.includes(filename) ? ' <span class="map-collision-tag">!</span>' : ''}</div>
           <div class="map-col-dest map-entry-dest ${isExcluded ? 'excluded-path' : ''}">${isExcluded ? 'excluded' : escapeHtml(dest)}</div>
           <div class="map-col-size">${size}</div>
+          <div class="map-col-wildcard">${matchingWildcard ? `<span class="wildcard-match-tag" title="Matched by wildcard">${escapeHtml(matchingWildcard)}</span>` : ''}</div>
         </div>
       `;
     }).join('');
@@ -1144,21 +1213,40 @@ async function handleDashboardDrop(e, el, projectName) {
   e.stopPropagation();
   el.classList.remove('drag-over');
 
-  const files = Array.from(e.dataTransfer.files);
-  if (files.length === 0) return;
+  // Collect files using items API (more reliable in Electron contextIsolation)
+  const fileList = [];
+  if (e.dataTransfer.items) {
+    for (const item of e.dataTransfer.items) {
+      if (item.kind === 'file') {
+        const f = item.getAsFile();
+        if (f) fileList.push(f);
+      }
+    }
+  } else {
+    fileList.push(...e.dataTransfer.files);
+  }
 
-  for (const file of files) {
+  if (fileList.length === 0) return;
+
+  for (const file of fileList) {
     el.classList.add('drop-processing');
     showAlert('alert-info', `📦 Processing — ${projectName}`, `Deploying <strong>${escapeHtml(file.name)}</strong>…`, false);
 
-    // Use webUtils.getPathForFile — the correct API for contextIsolation mode
-    const filePath = zm.getPathForFile(file);
+    // Try webUtils.getPathForFile first (Electron 28+ with contextIsolation)
+    // Fall back to file.path (older Electron) then file.name as last resort indicator
+    let filePath = null;
+    try { filePath = zm.getPathForFile(file); } catch (_) {}
+    if (!filePath) filePath = file.path || null;
+
+    console.log('[Drop] file.name:', file.name, '| resolved path:', filePath);
+
     if (!filePath) {
       el.classList.remove('drop-processing');
-      showAlert('alert-danger', 'Drop Failed', 'Could not resolve file path. Try dropping again.', true);
+      showAlert('alert-danger', 'Drop Failed', `Could not resolve path for "${escapeHtml(file.name)}". Open DevTools (Ctrl+Shift+I) and check console for details.`, true);
       continue;
     }
     const res = await zm.handleDrop(projectName, filePath);
+    console.log('[Drop] handleDrop result:', JSON.stringify({ success: res.success, action: res.action, status: res.result && res.result.status }));
     el.classList.remove('drop-processing');
 
     if (!res.success) {
@@ -1198,6 +1286,64 @@ function showConflictDialog(filename, filePath, projectNames) {
   });
 }
 
+// ─── Wildcard Modal ───────────────────────────────────────────────────────────
+
+let _wildcardProjectName = null;
+let _wildcardEditingPattern = null;
+
+function openWildcardModal(projectName, existingWc) {
+  _wildcardProjectName = projectName;
+  _wildcardEditingPattern = existingWc ? existingWc.pattern : null;
+
+  $('wildcardModalTitle').textContent = existingWc ? 'Edit Wildcard Pattern' : 'Add Wildcard Pattern';
+  $('inputWcPattern').value    = existingWc ? existingWc.pattern     : '';
+  $('inputWcDestination').value = existingWc ? existingWc.destination : '{root}\\{filename}';
+  $('inputWcDescription').value = existingWc ? (existingWc.description || '') : '';
+  $('wildcardError').style.display = 'none';
+  $('modalWildcard').style.display = 'flex';
+  $('inputWcPattern').focus();
+}
+
+async function saveWildcard() {
+  const pattern     = $('inputWcPattern').value.trim();
+  const destination = $('inputWcDestination').value.trim();
+  const description = $('inputWcDescription').value.trim();
+
+  $('wildcardError').style.display = 'none';
+
+  if (!pattern) {
+    $('wildcardError').textContent = 'Please enter a pattern.';
+    $('wildcardError').style.display = 'block';
+    return;
+  }
+  if (!destination) {
+    $('wildcardError').textContent = 'Please enter a destination path.';
+    $('wildcardError').style.display = 'block';
+    return;
+  }
+  if (!destination.includes('{filename}')) {
+    $('wildcardError').textContent = 'Destination must include {filename} token.';
+    $('wildcardError').style.display = 'block';
+    return;
+  }
+
+  $('modalWildcard').style.display = 'none';
+
+  let res;
+  if (_wildcardEditingPattern) {
+    res = await zm.updateWildcard(_wildcardProjectName, _wildcardEditingPattern, { pattern, destination, description });
+  } else {
+    res = await zm.addWildcard(_wildcardProjectName, pattern, destination, description);
+  }
+
+  if (!res.success) {
+    showAlert('alert-danger', 'Wildcard Error', escapeHtml(res.error), true);
+    return;
+  }
+
+  openProject(_wildcardProjectName);
+}
+
 // ─── Event Bindings ───────────────────────────────────────────────────────────
 
 // Safe element binder — logs warning instead of crashing on missing elements
@@ -1208,6 +1354,21 @@ function on(id, event, handler) {
 }
 
 function bindEvents() {
+  // CRITICAL: Prevent default on document-level drag events.
+  // Without this, OS-level file drops (from Windows Explorer) are rejected
+  // before they reach any child element's drop handler.
+  document.addEventListener('dragover',  e => { e.preventDefault(); e.stopPropagation(); });
+  document.addEventListener('dragleave', e => { e.preventDefault(); e.stopPropagation(); });
+  document.addEventListener('drop',      e => {
+    e.preventDefault();
+    e.stopPropagation();
+    // If a file lands on the document body (missed the zone), log it
+    if (!e.target.closest('.drop-zone-target')) {
+      console.log('[Drop] Missed zone — landed on:', e.target.className || e.target.tagName,
+        '| files:', Array.from(e.dataTransfer.files).map(f => f.name));
+    }
+  });
+
   // Setup screen
   $('btnBrowseSetupRoot').addEventListener('click', async () => {
     const res = await zm.browseZipMoverRoot();
@@ -1378,6 +1539,24 @@ function bindEvents() {
 
   $('modalExclusions').addEventListener('click', e => {
     if (e.target === $('modalExclusions')) $('modalExclusions').style.display = 'none';
+  });
+
+  // Wildcard modal bindings
+  on('btnWildcardClose',  'click', () => { $('modalWildcard').style.display = 'none'; });
+  on('btnWildcardCancel', 'click', () => { $('modalWildcard').style.display = 'none'; });
+  on('btnWildcardSave',   'click', saveWildcard);
+  on('btnWcBrowse', 'click', async () => {
+    const res = await zm.browseFolder();
+    if (res.success) {
+      const dest = res.path.replace(/\\/g, '\\\\') + '\\\\{filename}';
+      $('inputWcDestination').value = '{root}\\\\' + res.path.split('\\').pop() + '\\\\{filename}';
+    }
+  });
+  on('inputWcPattern',     'keydown', e => { if (e.key === 'Enter') $('inputWcDestination').focus(); });
+  on('inputWcDestination', 'keydown', e => { if (e.key === 'Enter') saveWildcard(); });
+
+  $('modalWildcard').addEventListener('click', e => {
+    if (e.target === $('modalWildcard')) $('modalWildcard').style.display = 'none';
   });
 }
 

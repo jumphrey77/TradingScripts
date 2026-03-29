@@ -79,6 +79,29 @@ class ZipProcessor {
         }
 
         if (!tokenizedDest) {
+          // ── Try wildcard match before falling through to unmatched ────────
+          const wc = this.projects.matchWildcard(projectName, filename);
+          if (wc) {
+            const absoluteWcDest = this.projects.resolveWildcardDestination(projectName, wc, filename);
+            try {
+              await fs.ensureDir(path.dirname(absoluteWcDest));
+              await fs.copy(fullPath, absoluteWcDest, { overwrite: true });
+              runResult.filesDeployed.push({
+                filename,
+                source: fullPath,
+                destination: absoluteWcDest,
+                wildcardPattern: wc.pattern
+              });
+              // Add to permanent map
+              const wcMap = this.projects.getProjectMap(projectName);
+              const tokenized = absoluteWcDest.replace(wcMap.destinationRoot, '{root}');
+              await this.projects.addFileToMap(projectName, filename, tokenized);
+            } catch (err) {
+              runResult.errors.push({ filename, error: 'Wildcard deploy: ' + err.message });
+            }
+            continue;
+          }
+
           // ── Unmatched file ────────────────────────────────────────────────
           const unmatchedDir = path.join(project.projectDir, 'NewFilesDetected');
           await fs.ensureDir(unmatchedDir);

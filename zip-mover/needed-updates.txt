@@ -5,7 +5,8 @@
 
 1.  If no files exist, brand new project, no files (manual initialization).  Suggestions
 2.  Docked App to Sytem TradeType
-3.  Single Files still not working.
+
+
 
 ## PRIORITY
 BUGS 

@@ -67,7 +67,16 @@ class FileDropHandler {
       }
     }
 
-    // Deploy the single file
+    // Try exact map match first, then wildcard
+    const wildcardMatch = !map.files[filename]
+      ? this.projects.matchWildcard(projectName, filename)
+      : null;
+
+    if (!map.files[filename] && wildcardMatch) {
+      const result = await this._deployWildcardFile(projectName, filename, filePath, wildcardMatch);
+      return { action: 'single', result };
+    }
+
     const result = await this._deploySingleFile(projectName, filename, filePath, map);
     return { action: 'single', result };
   }
@@ -122,6 +131,59 @@ class FileDropHandler {
         runResult.errors.push({ filename, error: err.message });
         runResult.status = 'failed';
       }
+    }
+
+    runResult.finishedAt = new Date().toISOString();
+    await this.projects.logRun(projectName, runResult);
+    await this.projects.pruneBackups(projectName, cfg.backupRetentionRuns || 10);
+    return runResult;
+  }
+
+  async _deployWildcardFile(projectName, filename, filePath, wildcardMatch) {
+    const cfg = this.config.getConfig();
+    const project = this.projects.getAllProjects().find(p => p.name === projectName);
+    const runNumber = this.projects.incrementRunNumber(projectName);
+    await this.projects.saveMap(projectName);
+
+    const runResult = {
+      runNumber,
+      zipName: filename,
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      filesDeployed: [],
+      filesBackedUp: [],
+      filesUnmatched: [],
+      filesExcluded: [],
+      collisionAlerts: [],
+      errors: [],
+      status: 'running',
+      isSingleFile: true,
+      wildcardMatch: wildcardMatch.pattern
+    };
+
+    const absoluteDest = this.projects.resolveWildcardDestination(projectName, wildcardMatch, filename);
+
+    try {
+      await fs.ensureDir(path.dirname(absoluteDest));
+      // Place the new file — do NOT overwrite differently-named existing files
+      // (old versions stay alongside the new one)
+      await fs.copy(filePath, absoluteDest, { overwrite: true });  // overwrite only if same name
+
+      runResult.filesDeployed.push({
+        filename,
+        destination: absoluteDest,
+        wildcardPattern: wildcardMatch.pattern
+      });
+      runResult.status = 'success';
+
+      // Add to permanent file map so future drops match exactly
+      const map = this.projects.getProjectMap(projectName);
+      const tokenizedPath = absoluteDest.replace(map.destinationRoot, '{root}');
+      await this.projects.addFileToMap(projectName, filename, tokenizedPath);
+
+    } catch (err) {
+      runResult.errors.push({ filename, error: err.message });
+      runResult.status = 'failed';
     }
 
     runResult.finishedAt = new Date().toISOString();

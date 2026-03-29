@@ -243,7 +243,8 @@ class ProjectManager {
     const map = {
       destinationRoot,
       excludedFolders,                                          // ← persisted
-      excludedFiles: (this.maps[name] && this.maps[name].excludedFiles) || [],  // ← persisted across rebuilds
+      excludedFiles: (this.maps[name] && this.maps[name].excludedFiles) || [],
+      wildcards: (this.maps[name] && this.maps[name].wildcards) || [],
       allowDropToUI: this.maps[name] ? (this.maps[name].allowDropToUI !== false) : true,
       nextRunNumber: (this.maps[name] && this.maps[name].nextRunNumber) || 1,
       builtAt: new Date().toISOString(),
@@ -273,6 +274,82 @@ class ProjectManager {
     map.nextRunNumber = 1;
     if (project) project.nextRunNumber = 1;
     if (project) project.lastRun = null;
+    await this.saveMap(projectName);
+  }
+
+
+  // ── Wildcard pattern matching ─────────────────────────────────────────────
+  // Converts a user pattern (with * and [*]) to a RegExp
+  _patternToRegex(pattern) {
+    // Must handle [*] BEFORE escaping to avoid mangling the brackets
+    // Step 1: protect [*] with a placeholder
+    let p = pattern.replace(/\[\*\]/g, '\x00SC\x00');
+    // Step 2: escape all regex special chars (including [ ] { } . + ^ $ etc.)
+    p = p.replace(/[.+^${}()|\[\]\\]/g, '\\$&');
+    // Step 3: restore single-char wildcard placeholder → regex dot
+    p = p.replace(/\x00SC\x00/g, '.');
+    // Step 4: * → .* (any chars)
+    p = p.replace(/\*/g, '.*');
+    return new RegExp('^' + p + '$', 'i');
+  }
+
+  // Find first matching wildcard for a filename
+  matchWildcard(projectName, filename) {
+    const map = this.maps[projectName];
+    if (!map || !map.wildcards || !map.wildcards.length) return null;
+    for (const wc of map.wildcards) {
+      const re = this._patternToRegex(wc.pattern);
+      if (re.test(filename)) return wc;
+    }
+    return null;
+  }
+
+  // Resolve wildcard destination — replaces {root} and {filename}
+  resolveWildcardDestination(projectName, wc, filename) {
+    const map = this.maps[projectName];
+    if (!map) return null;
+    return wc.destination
+      .replace('{root}', map.destinationRoot)
+      .replace('{filename}', filename);
+  }
+
+  // Add a wildcard pattern to the map
+  async addWildcard(projectName, pattern, destination, description) {
+    const map = this.maps[projectName];
+    if (!map) throw new Error(`Project "${projectName}" not found`);
+    if (!map.wildcards) map.wildcards = [];
+    // Check for duplicate pattern
+    if (map.wildcards.find(w => w.pattern.toLowerCase() === pattern.toLowerCase())) {
+      throw new Error(`Pattern "${pattern}" already exists`);
+    }
+    map.wildcards.push({ pattern, destination, description: description || '' });
+    await this.saveMap(projectName);
+  }
+
+  // Remove a wildcard pattern
+  async removeWildcard(projectName, pattern) {
+    const map = this.maps[projectName];
+    if (!map) throw new Error(`Project "${projectName}" not found`);
+    map.wildcards = (map.wildcards || []).filter(w => w.pattern !== pattern);
+    await this.saveMap(projectName);
+  }
+
+  // Update a wildcard entry
+  async updateWildcard(projectName, oldPattern, newEntry) {
+    const map = this.maps[projectName];
+    if (!map) throw new Error(`Project "${projectName}" not found`);
+    const idx = (map.wildcards || []).findIndex(w => w.pattern === oldPattern);
+    if (idx === -1) throw new Error(`Pattern "${oldPattern}" not found`);
+    map.wildcards[idx] = { ...map.wildcards[idx], ...newEntry };
+    await this.saveMap(projectName);
+  }
+
+  // Add a new file to the permanent map (called after wildcard deploy)
+  async addFileToMap(projectName, filename, tokenizedPath) {
+    const map = this.maps[projectName];
+    if (!map) return;
+    map.files[filename] = tokenizedPath;
+    map.fileCount = Object.keys(map.files).length;
     await this.saveMap(projectName);
   }
 

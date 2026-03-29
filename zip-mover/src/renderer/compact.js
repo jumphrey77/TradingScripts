@@ -94,14 +94,23 @@ async function onDrop(e, el, projectName) {
   e.stopPropagation();
   el.classList.remove('drag-over');
 
-  const files = Array.from(e.dataTransfer.files);
-  if (files.length === 0) return;
+  // Use items API for reliable path resolution in contextIsolation mode
+  const fileList = [];
+  if (e.dataTransfer.items) {
+    for (const item of e.dataTransfer.items) {
+      if (item.kind === 'file') { const f = item.getAsFile(); if (f) fileList.push(f); }
+    }
+  } else {
+    fileList.push(...e.dataTransfer.files);
+  }
+  if (fileList.length === 0) return;
 
-  // Process each dropped file — use webUtils.getPathForFile for contextIsolation
-  for (const file of files) {
-    const filePath = zm.getPathForFile(file);
+  for (const file of fileList) {
+    let filePath = null;
+    try { filePath = zm.getPathForFile(file); } catch (_) {}
+    if (!filePath) filePath = file.path || null;
     if (!filePath) {
-      setStatus('Could not resolve file path — try dropping again.', 'error');
+      setStatus('Could not resolve path for ' + file.name, 'error');
       continue;
     }
     await processDroppedFile(el, projectName, filePath);
@@ -194,6 +203,14 @@ async function resolveConflict(projectName) {
 
 // ─── Event bindings ───────────────────────────────────────────────────────────
 function bindEvents() {
+  // Document-level drag prevention for OS file drops
+  document.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
+  document.addEventListener('drop', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[Compact Drop] on doc, target:', e.target.className);
+  });
+
   $('btnCloseCompact').addEventListener('click', () => zm.closeCompact());
   $('btnExpandToFull').addEventListener('click', () => zm.closeCompact());
   $('btnConflictCancel').addEventListener('click', () => {

@@ -85,6 +85,12 @@ class CompactWindowManager {
       this.onEvent({ type: 'compact-closed' });
     });
 
+    // Prevent navigation on file drop in compact window too
+    this.window.webContents.on('will-navigate', (e, url) => {
+      if (!url.endsWith('compact.html')) e.preventDefault();
+    });
+    this.window.webContents.on('will-frame-navigate', (e) => { e.preventDefault(); });
+
     if (process.argv.includes('--dev')) {
       this.window.webContents.openDevTools({ mode: 'detach' });
     }

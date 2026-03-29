@@ -2049,3 +2049,111 @@ h1, h2, h3, h4,
   background: rgba(192,57,43,0.08);
   border-color: rgba(192,57,43,0.3);
 }
+
+/* ─── Wildcard patterns section ──────────────────────────────────────────── */
+
+.wildcard-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 8px;
+  background: var(--bg-base);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+  transition: border-color var(--transition);
+}
+
+.wildcard-row:hover { border-color: var(--border-bright); }
+
+.wildcard-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wildcard-pattern {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.wildcard-arrow {
+  color: var(--text-muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.wildcard-dest {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wildcard-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-style: italic;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.wildcard-actions {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.btn-wc-edit {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-bright);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: 10px;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.btn-wc-edit:hover { border-color: var(--accent); color: var(--accent); }
+
+.btn-wc-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  transition: color var(--transition);
+}
+.btn-wc-delete:hover { color: var(--danger); }
+
+/* ─── Wildcard column in file map ────────────────────────────────────────── */
+
+.map-col-wildcard {
+  width: 120px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wildcard-match-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--accent);
+  opacity: 0.55;
+  background: var(--accent-glow);
+  padding: 1px 5px;
+  border-radius: 3px;
+  cursor: default;
+}

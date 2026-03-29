@@ -36,6 +36,17 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   mainWindow.once('ready-to-show', () => { mainWindow.show(); initializeApp(); });
   if (process.argv.includes('--dev')) mainWindow.webContents.openDevTools();
+
+  // CRITICAL: Prevent Electron from navigating to dropped files.
+  // Without this, dropping a file onto the window causes a page reload
+  // before any drop event handler in the renderer can fire.
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    // Block any navigation that isn't our own app html
+    if (!url.startsWith('file://') || !url.endsWith('index.html')) {
+      e.preventDefault();
+    }
+  });
+  mainWindow.webContents.on('will-frame-navigate', (e) => { e.preventDefault(); });
 }
 
 async function initializeApp() {
@@ -314,6 +325,28 @@ ipcMain.handle('update-map-entry', async (event, { projectName, filename, destin
   try {
     await projectManager.updateMapEntry(projectName, filename, destination);
     sendStateUpdate(); return { success: true };
+  } catch (err) { return { success: false, error: err.message }; }
+});
+
+ipcMain.handle('add-wildcard', async (event, { name, pattern, destination, description }) => {
+  try { await projectManager.addWildcard(name, pattern, destination, description); sendStateUpdate(); return { success: true }; }
+  catch (err) { return { success: false, error: err.message }; }
+});
+
+ipcMain.handle('remove-wildcard', async (event, { name, pattern }) => {
+  try { await projectManager.removeWildcard(name, pattern); sendStateUpdate(); return { success: true }; }
+  catch (err) { return { success: false, error: err.message }; }
+});
+
+ipcMain.handle('update-wildcard', async (event, { name, oldPattern, newEntry }) => {
+  try { await projectManager.updateWildcard(name, oldPattern, newEntry); sendStateUpdate(); return { success: true }; }
+  catch (err) { return { success: false, error: err.message }; }
+});
+
+ipcMain.handle('get-wildcards', async (event, { name }) => {
+  try {
+    const map = projectManager.getProjectMap(name);
+    return { success: true, wildcards: (map && map.wildcards) || [] };
   } catch (err) { return { success: false, error: err.message }; }
 });
 
