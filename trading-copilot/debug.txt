@@ -1,5 +1,0 @@
-"scripts": {
-    "start": "electron . --remote-debugging-port=9222",
-    "dev": "NODE_ENV=development electron .",
-    "build": "electron-builder"
-  },
