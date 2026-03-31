@@ -19,6 +19,11 @@ useRsiExit    = input.bool(false, "Enable RSI Overbought Exit",          group =
 rsiLength     = input.int(14,     "RSI Length",           minval = 1,    group = "RSI Exit")
 rsiOverbought = input.int(80,     "RSI Overbought Level", minval = 50, maxval = 100, group = "RSI Exit")
 
+// ─── CCI EXIT (toggle on/off) ──────────────────────────────────────────────
+useCciExit    = input.bool(false, "Enable CCI Overbought Exit",          group = "CCI Exit")
+cciLength     = input.int(20,     "CCI Length",           minval = 1,    group = "CCI Exit")
+cciOverbought = input.int(100,    "CCI Overbought Level", minval = 50, maxval = 300, group = "CCI Exit")
+
 // ─── OPTIONAL FILTERS (all OFF by default) ─────────────────────────────────
 useAdx        = input.bool(false, "Enable ADX Filter",       group = "Optional Filters")
 adxLen        = input.int(14,     "ADX Length",              group = "Optional Filters")
@@ -50,6 +55,7 @@ inWindow  = time >= startDate and time <= endDate
 supertrend := barstate.isfirst ? na : supertrend
 atrValue = ta.atr(atrPeriod)
 rsi = ta.rsi(close, rsiLength)
+cci = ta.cci(close, cciLength)
 
 // ADX
 dirmov(len) =>
@@ -86,6 +92,14 @@ if strategy.position_size == 0
 if strategy.position_size > 0 and not rsiTriggered and rsi >= rsiOverbought
     rsiTriggered := true
 rsiExit = useRsiExit and rsiTriggered and strategy.position_size > 0
+
+// ─── CCI EXIT LOGIC ────────────────────────────────────────────────────────
+var bool cciTriggered = false
+if strategy.position_size == 0
+    cciTriggered := false
+if strategy.position_size > 0 and not cciTriggered and cci >= cciOverbought
+    cciTriggered := true
+cciExit = useCciExit and cciTriggered and strategy.position_size > 0
 
 // ─── SIGNALS ───────────────────────────────────────────────────────────────
 goLong = direction[1] > direction
@@ -129,7 +143,7 @@ if entryOk
     tradeLine  := line.new(x1 = time, y1 = entryPrice, x2 = time + 1, y2 = entryPrice,
          xloc = xloc.bar_time, color = color.white, width = 2, style = line.style_solid, extend = extend.right)
 
-if (goFlat or rsiExit or (useStop and not na(stopLevel) and low <= stopLevel)) and not na(tradeLine)
+if (goFlat or rsiExit or cciExit or (useStop and not na(stopLevel) and low <= stopLevel)) and not na(tradeLine)
     tradeColor = close >= entryPrice ? color.green : color.red
     line.set_x2(tradeLine, time)
     line.set_y2(tradeLine, close)
@@ -149,3 +163,6 @@ if goFlat
 
 if rsiExit
     strategy.close("Long", comment = "RSI Exit")
+
+if cciExit
+    strategy.close("Long", comment = "CCI Exit")
