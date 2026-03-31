@@ -1,0 +1,168 @@
+//@version=6
+strategy("AI - Supertrend v8 Daily", overlay=true, calc_on_every_tick=false, initial_capital=1000, default_qty_type=strategy.percent_of_equity, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.1, slippage=3, pyramiding=1, margin_long=0, margin_short=0, fill_orders_on_standard_ohlc=true)
+
+// ─── STRATEGY META ──────────────────────────────────────────────────────────
+// Timeframe: 1D (Daily)
+// Based on user's TradingView findings:
+//   ATR 2, Factor 1 on daily chart with all filters OFF produces:
+//   BTC: +$1400, ETH: +$1846, DOGE: +$600, SOL: +$3 (~105 trades)
+//
+// All filters default OFF. RSI Exit is the only optional toggle.
+// The daily timeframe eliminates the 5m noise that killed v1-v7.
+
+// ─── SUPERTREND ─────────────────────────────────────────────────────────────
+atrPeriod = input.int(2,     "ATR Length",  minval = 1)
+factor    = input.float(1.0, "Factor",      minval = 0.01, step = 0.01)
+
+// ─── RSI EXIT (toggle on/off) ──────────────────────────────────────────────
+useRsiExit    = input.bool(false, "Enable RSI Overbought Exit",          group = "RSI Exit")
+rsiLength     = input.int(14,     "RSI Length",           minval = 1,    group = "RSI Exit")
+rsiOverbought = input.int(80,     "RSI Overbought Level", minval = 50, maxval = 100, group = "RSI Exit")
+
+// ─── CCI EXIT (toggle on/off) ──────────────────────────────────────────────
+useCciExit    = input.bool(false, "Enable CCI Overbought Exit",          group = "CCI Exit")
+cciLength     = input.int(20,     "CCI Length",           minval = 1,    group = "CCI Exit")
+cciOverbought = input.int(100,    "CCI Overbought Level", minval = 50, maxval = 300, group = "CCI Exit")
+
+// ─── OPTIONAL FILTERS (all OFF by default) ─────────────────────────────────
+useAdx        = input.bool(false, "Enable ADX Filter",       group = "Optional Filters")
+adxLen        = input.int(14,     "ADX Length",              group = "Optional Filters")
+adxThresh     = input.int(25,     "ADX Threshold",           group = "Optional Filters")
+
+useEma        = input.bool(false, "Enable EMA Trend Filter", group = "Optional Filters")
+emaLen        = input.int(50,     "EMA Length",              group = "Optional Filters")
+
+useVolFilter  = input.bool(false, "Enable Volume Filter",    group = "Optional Filters")
+volMaLen      = input.int(20,     "Volume MA Length",        group = "Optional Filters")
+volMultiplier = input.float(1.0,  "Volume Multiplier",      group = "Optional Filters")
+
+useRsiEntry   = input.bool(false, "Enable RSI Entry Filter", group = "Optional Filters")
+rsiEntryMax   = input.int(65,     "Max RSI for Entry",       group = "Optional Filters")
+
+// ─── OPTIONAL STOP LOSS (OFF by default) ────────────────────────────────────
+useStop       = input.bool(false, "Enable ATR Trailing Stop",            group = "Stop Loss")
+slAtrMult     = input.float(3.0,  "ATR Multiplier",  minval = 0.1,      group = "Stop Loss")
+useHardStop   = input.bool(false, "Enable Hard % Floor",                 group = "Stop Loss")
+hardStopPct   = input.float(10.0, "Hard Stop %",     minval = 0.1,      group = "Stop Loss")
+
+// ─── DATE FILTER ───────────────────────────────────────────────────────────
+startDate = input.time(timestamp("01 Jan 2018 00:00 +0000"), "Start Date", group = "Backtest Date Range")
+endDate   = input.time(timestamp("31 Dec 2069 23:59 +0000"), "End Date",   group = "Backtest Date Range")
+inWindow  = time >= startDate and time <= endDate
+
+// ─── INDICATORS ────────────────────────────────────────────────────────────
+[supertrend, direction] = ta.supertrend(factor, atrPeriod)
+supertrend := barstate.isfirst ? na : supertrend
+atrValue = ta.atr(atrPeriod)
+rsi = ta.rsi(close, rsiLength)
+cci = ta.cci(close, cciLength)
+
+// ADX
+dirmov(len) =>
+    up   = ta.change(high)
+    down = -ta.change(low)
+    plusDM  = na(up)   ? na : (up > down and up > 0   ? up   : 0)
+    minusDM = na(down) ? na : (down > up and down > 0 ? down : 0)
+    truerange = ta.rma(ta.tr, len)
+    plus  = fixnan(100 * ta.rma(plusDM, len) / truerange)
+    minus = fixnan(100 * ta.rma(minusDM, len) / truerange)
+    [plus, minus]
+
+adx(dilen, adxlen) =>
+    [plus, minus] = dirmov(dilen)
+    sum = plus + minus
+    100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), adxlen)
+
+adxValue = adx(adxLen, adxLen)
+
+// EMA & Volume
+ema = ta.ema(close, emaLen)
+volMa = ta.sma(volume, volMaLen)
+
+// ─── FILTER CHECKS ─────────────────────────────────────────────────────────
+adxOk      = not useAdx       or adxValue >= adxThresh
+emaOk      = not useEma       or close > ema
+volOk      = not useVolFilter  or volume > volMa * volMultiplier
+rsiEntryOk = not useRsiEntry   or rsi <= rsiEntryMax
+
+// ─── RSI EXIT LOGIC ────────────────────────────────────────────────────────
+var bool rsiTriggered = false
+if strategy.position_size == 0
+    rsiTriggered := false
+if strategy.position_size > 0 and not rsiTriggered and rsi >= rsiOverbought
+    rsiTriggered := true
+rsiExit = useRsiExit and rsiTriggered and strategy.position_size > 0
+
+// ─── CCI EXIT LOGIC ────────────────────────────────────────────────────────
+var bool cciTriggered = false
+if strategy.position_size == 0
+    cciTriggered := false
+if strategy.position_size > 0 and not cciTriggered and cci >= cciOverbought
+    cciTriggered := true
+cciExit = useCciExit and cciTriggered and strategy.position_size > 0
+
+// ─── SIGNALS ───────────────────────────────────────────────────────────────
+goLong = direction[1] > direction
+goFlat = direction[1] < direction
+entryOk = goLong and inWindow and adxOk and emaOk and volOk and rsiEntryOk
+
+// ─── STOP LOSS ─────────────────────────────────────────────────────────────
+var float stopLevel = na
+
+if entryOk
+    atrStop  = close - atrValue * slAtrMult
+    hardStop = close * (1 - hardStopPct / 100)
+    stopLevel := useStop ? (useHardStop ? math.max(atrStop, hardStop) : atrStop) : na
+
+// Trail stop up
+if strategy.position_size > 0 and useStop
+    newTrail = close - atrValue * slAtrMult
+    if not na(stopLevel) and newTrail > stopLevel
+        stopLevel := newTrail
+
+if strategy.position_size == 0
+    stopLevel := na
+
+// ─── PLOTS ─────────────────────────────────────────────────────────────────
+upTrend    = plot(direction < 0 ? supertrend : na, "Up Trend",   color = color.green, style = plot.style_linebr)
+downTrend  = plot(direction < 0 ? na : supertrend, "Down Trend", color = color.red,   style = plot.style_linebr)
+bodyMiddle = plot(barstate.isfirst ? na : (open + close) / 2,    "Body Middle", display = display.none)
+
+fill(bodyMiddle, upTrend,   title = "Uptrend background",   color = color.new(color.green, 90), fillgaps = false)
+fill(bodyMiddle, downTrend, title = "Downtrend background", color = color.new(color.red,   90), fillgaps = false)
+
+plot(strategy.position_size > 0 and useStop ? stopLevel : na, "Stop", color = color.orange, style = plot.style_linebr, linewidth = 1)
+plot(useEma ? ema : na, "EMA", color = color.new(color.yellow, 30), linewidth = 1)
+
+// ─── TRADE LINES ───────────────────────────────────────────────────────────
+var line  tradeLine  = na
+var float entryPrice = na
+
+if entryOk
+    entryPrice := close
+    tradeLine  := line.new(x1 = time, y1 = entryPrice, x2 = time + 1, y2 = entryPrice,
+         xloc = xloc.bar_time, color = color.white, width = 2, style = line.style_solid, extend = extend.right)
+
+if (goFlat or rsiExit or cciExit or (useStop and not na(stopLevel) and low <= stopLevel)) and not na(tradeLine)
+    tradeColor = close >= entryPrice ? color.green : color.red
+    line.set_x2(tradeLine, time)
+    line.set_y2(tradeLine, close)
+    line.set_color(tradeLine, tradeColor)
+    line.set_extend(tradeLine, extend.none)
+    tradeLine := na
+
+// ─── ORDERS ────────────────────────────────────────────────────────────────
+if entryOk
+    strategy.entry("Long", strategy.long)
+
+if useStop and not na(stopLevel)
+    strategy.exit("SL", from_entry = "Long", stop = stopLevel, comment = "Trail Stop")
+
+if goFlat
+    strategy.close("Long", comment = "ST Flip")
+
+if rsiExit
+    strategy.close("Long", comment = "RSI Exit")
+
+if cciExit
+    strategy.close("Long", comment = "CCI Exit")
